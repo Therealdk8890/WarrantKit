@@ -20,7 +20,10 @@ from .engine import (
 from .events import Event, EventLog
 from .evidence import EvidenceEnvelope, canonical_json
 from .external_authorization import ExternalAuthorizationDecision, import_authorization
-from .external_evidence import ExternalEvidenceReference
+from .external_evidence import ExternalEvidenceReference, digest_artifact
+from .external_handoff import CorrelationState, ExternalEvidenceHandoff, HandoffCorrelation, correlate_handoff
+from .verification_result import VerificationResult, VerificationStatus, compose_verification
+from .attestation import AttestationEnvelope, Ed25519Signer, Ed25519Verifier
 from .fleet import Agent, FleetRegistry, FleetScope, Organization, Project, Runtime
 from .fleet_status import FleetPolicyStatus, fleet_policy_status
 from .fleet_status_history import FleetPolicyStatusHistory, FleetPolicyStatusSnapshot
@@ -62,6 +65,17 @@ __all__ = [
     "ExternalAuthorizationDecision",
     "import_authorization",
     "ExternalEvidenceReference",
+    "digest_artifact",
+    "CorrelationState",
+    "ExternalEvidenceHandoff",
+    "HandoffCorrelation",
+    "correlate_handoff",
+    "VerificationResult",
+    "VerificationStatus",
+    "compose_verification",
+    "AttestationEnvelope",
+    "Ed25519Signer",
+    "Ed25519Verifier",
     "Agent",
     "FleetRegistry",
     "FleetScope",
