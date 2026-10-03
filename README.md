@@ -6,6 +6,8 @@
 
 > **Don't ask the agent to enforce its own boundaries. Enforce them from outside the agent trust boundary.**
 
+The core invariant is simple: **authority must not survive the runtime state that created it.** A Warrant is bound to an execution and runtime epoch; when containment or recovery advances that epoch, a retained pre-containment Warrant becomes stale and cannot be replayed.
+
 WarrantKit is the platform/control layer around the AgentContainment enforcement engine. The repository ships local authorization, admission, runtime containment coordination, epoch fencing, recovery gating, evidence envelopes, fleet-governance primitives, external evidence contracts, cryptographic attestation primitives, and offline verification receipts. Hosted multi-tenant operations and enterprise integrations are not shipped here.
 
 The practical question is: **what is an autonomous agent allowed to do, what happens when it crosses that boundary, how is its authority revoked, and what evidence can be independently checked afterward?**
@@ -93,9 +95,10 @@ The privileged Linux proof uses a real child process and a real cgroup-v2 bounda
 2. launch a real workload and attach it;
 3. admit the workload under a Warrant;
 4. invoke AgentContainment through WarrantKit;
-5. independently verify the cgroup is empty and the workload exited;
-6. export runtime-pinned evidence;
-7. verify that exported artifact with the standalone stdlib-only verifier.
+5. prove that a serialized pre-containment Warrant is rejected after the runtime epoch changes;
+6. independently verify the cgroup is empty and the workload exited;
+7. export runtime-pinned evidence, including the stale-authority rejection;
+8. verify that exported artifact with the standalone stdlib-only verifier.
 
 Run:
 
@@ -106,7 +109,7 @@ python tools/run_real_kill_demo.py
 
 The demo emits a portable evidence artifact and passes it through `tools/verify_runtime_evidence.py`. The fixture used by the verifier is a contract test; the real-kill path is the host-dependent proof. The lower-level pytest remains available for regression coverage.
 
-**What this proves:** the tested Linux environment can enforce the configured cgroup-v2 kill/fence boundary, produce runtime-pinned evidence, and have that artifact independently checked.
+**What this proves:** the tested Linux environment can enforce the configured cgroup-v2 kill/fence boundary, reject replay of pre-containment authority after the epoch changes, produce runtime-pinned evidence, and have that artifact independently checked.
 
 **What this does not prove:** universal host isolation, arbitrary kernel/runtime security, reversal of already-completed side effects, formal verification, or non-repudiable host attestation.
 
@@ -136,6 +139,27 @@ The verifier checks schema shape, identity, event ordering, runtime binding, exa
 The Warrant lifecycle has a bounded deterministic interleaving regression using `interleave-test`. Issue #81 is complete, including the existing containment/verification interleaving model.
 
 This is evidence for the explored schedules and preemption bound, not a universal concurrency proof.
+
+## Stale-authority attack
+
+The important failure mode is not only whether the process can be killed. It is whether authority retained before containment can still be used afterward.
+
+```text
+Before containment
+    Warrant(epoch=N) ──► authority is valid
+             │
+             ▼
+        containment
+             │
+             └──► runtime epoch advances to N+1
+                         │
+                         ▼
+After containment
+    replay Warrant(epoch=N) ──► REJECTED
+    fresh Warrant(epoch=N+1) ─► requires recovery policy
+```
+
+The old Warrant is not "revoked later" as the security boundary. Its runtime epoch is stale, so replay fails against the current execution state. The real-kill proof exercises this with a serialized Warrant snapshot, not an in-memory object.
 
 ## Kill path
 
