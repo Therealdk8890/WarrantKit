@@ -17,6 +17,7 @@ from pathlib import Path
 from agentcontain.engine import admit, build_agentcontainment_engine, contain
 from agentcontain.evidence import EvidenceEnvelope, canonical_json
 from agentcontain.policy import Policy
+from agentcontain.warrant import Warrant, verify_warrant
 
 
 def _record_binding(record: dict) -> dict:
@@ -65,19 +66,42 @@ def main() -> int:
 
         print(f"    warrant={admission.warrant.warrant_id}")
         print(f"    epoch={admission.identity.epoch}")
+        if admission.warrant is None:
+            raise RuntimeError("real-kill proof requires a Warrant-bound admission")
+        pre_containment_warrant = admission.warrant.to_dict()
 
-        print("[3/7] invoking external runtime enforcement")
+        print("[3/8] invoking external runtime enforcement")
         report = contain(admission)
         assert report.complete
         assert report.external_verified
 
-        print("[4/7] independently checking terminal runtime state")
+        print("[4/8] proving pre-containment authority is stale")
+        replayed_warrant = Warrant.from_dict(pre_containment_warrant)
+        try:
+            verify_warrant(replayed_warrant, execution_id=admission.identity.execution_id, agent_id=admission.identity.agent_id, policy_id=admission.identity.policy_id, policy_digest=admission.identity.policy_digest, runtime_id=runtime_id, epoch=admission.identity.epoch)
+        except ValueError as exc:
+            if "epoch" not in str(exc):
+                raise
+            print(f"    stale pre-containment Warrant rejected: {exc}")
+        else:
+            raise AssertionError("pre-containment Warrant remained valid after epoch transition")
+
+        try:
+            verify_warrant(admission.warrant, execution_id=admission.identity.execution_id, agent_id=admission.identity.agent_id, policy_id=admission.identity.policy_id, policy_digest=admission.identity.policy_digest, runtime_id=runtime_id, epoch=admission.identity.epoch)
+        except ValueError as exc:
+            if "revoked" not in str(exc):
+                raise
+            print(f"    revoked live Warrant rejected: {exc}")
+        else:
+            raise AssertionError("revoked Warrant remained executable")
+
+        print("[5/8] independently checking terminal runtime state")
         assert not supervisor.is_populated(cgroup)
         child.wait(timeout=5)
         assert child.returncode is not None
         print(f"    workload exited with code {child.returncode}")
 
-        print("[5/7] exporting runtime-pinned evidence")
+        print("[6/8] exporting runtime-pinned evidence")
         authority_export = getattr(admission.engine, "authority_revocation_evidence_record", None)
         if authority_export is None:
             raise RuntimeError("runtime engine does not expose authority revocation evidence")
@@ -121,6 +145,16 @@ def main() -> int:
                     "name": "containment_verified",
                     "epoch": admission.identity.epoch,
                 },
+                {
+                    "execution_id": admission.identity.execution_id,
+                    "sequence": 2,
+                    "name": "stale_authority_rejected",
+                    "epoch": admission.identity.epoch,
+                    "details": {
+                        "warrant_epoch": replayed_warrant.runtime.epoch,
+                        "reason": "runtime_epoch_mismatch",
+                    },
+                },
             ),
             verification={"status": "observed"},
         ).with_runtime_pinned_evidence(binding)
@@ -138,7 +172,7 @@ def main() -> int:
         )
         print(f"    artifact={artifact}")
 
-        print("[6/7] independently verifying exported artifact")
+        print("[7/8] independently verifying exported artifact")
         verifier = Path(__file__).with_name("verify_runtime_evidence.py")
         result = subprocess.run(
             [sys.executable, str(verifier), str(artifact)],
@@ -151,9 +185,10 @@ def main() -> int:
             return 1
         print(f"    {result.stdout.strip()}")
 
-        print("[7/7] proof complete")
+        print("[8/8] proof complete")
         print("What this proves: the tested Linux environment enforced the configured")
-        print("cgroup-v2 kill/fence boundary and produced independently checked evidence.")
+        print("cgroup-v2 kill/fence boundary, invalidated pre-containment authority,")
+        print("and produced independently checked evidence.")
         print("What this does not prove: universal host isolation, formal verification,")
         print("or non-repudiable host attestation.")
         return 0
