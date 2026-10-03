@@ -138,6 +138,32 @@ def test_recovery_issues_fresh_warrant_only_after_new_epoch():
     )
 
 
+
+def test_stale_runtime_report_cannot_verify_after_epoch_advance():
+    engine = RuntimeEngine()
+    admission = admit(
+        Policy("production"),
+        agent_id="agent-1",
+        engine=engine,
+        runtime_id="runtime-1",
+    )
+
+    contain(admission)
+    assert admission.identity.epoch == 1
+
+    # Simulate a late report from the pre-containment epoch. The existing
+    # verifier must reject it rather than projecting old evidence into the
+    # current epoch.
+    stale_report = RuntimeReport()
+    stale_report.epoch = 0
+    engine.last_report = stale_report
+
+    from agentcontain.engine import verify
+
+    with pytest.raises(RuntimeError, match="verification report is unavailable"):
+        verify(admission)
+
+
 def test_warrant_binding_rejects_wrong_execution_identity():
     engine = RuntimeEngine()
     admission = admit(
