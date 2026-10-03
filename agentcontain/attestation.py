@@ -31,7 +31,7 @@ _DOMAIN = b"warrantkit-attestation/v1\x00"
 
 
 def canonical_bytes(value: Any) -> bytes:
-    """Serialize JSON values deterministically for the attestation profile."""
+    """Serialize JSON deterministically for the WarrantKit attestation profile.\n\nThis profile is intentionally distinct from ``evidence.canonical_json``:\nattestation bytes are part of the Ed25519 signature contract, while the\nevidence profile is used for evidence content hashing and transport.\nDo not replace one with the other without a schema/profile change.\n"""
     return json.dumps(
         value,
         ensure_ascii=False,
