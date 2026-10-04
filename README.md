@@ -2,7 +2,7 @@
 
 [![WarrantKit CI](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml)
 
-**Runtime authorization, containment, and evidence platform for autonomous AI agents.**
+**Authority that expires when the runtime state that created it changes.**
 
 > **Don't ask the agent to enforce its own boundaries. Enforce them from outside the agent trust boundary.**
 
@@ -10,7 +10,7 @@ The core invariant is simple: **authority must not survive the runtime state tha
 
 WarrantKit is the platform/control layer around the AgentContainment enforcement engine. The repository ships local authorization, admission, runtime containment coordination, epoch fencing, recovery gating, evidence envelopes, fleet-governance primitives, external evidence contracts, cryptographic attestation primitives, and offline verification receipts. Hosted multi-tenant operations and enterprise integrations are not shipped here.
 
-The practical question is: **what is an autonomous agent allowed to do, what happens when it crosses that boundary, how is its authority revoked, and what evidence can be independently checked afterward?**
+The practical question is: **what is an autonomous agent allowed to do, what happens when it crosses that boundary, how is its authority revoked, and what evidence can be checked afterward?**
 
 ## 30-second demo
 
@@ -30,7 +30,7 @@ For actual host enforcement, use the environment-gated Linux proof below.
 
 A **Warrant** is WarrantKit's portable authority contract for one execution. It binds execution identity, accepted policy identity and digest, runtime identity and epoch, validity/revocation state, capabilities, constraints, and required evidence.
 
-Today the Warrant is a typed, transport-neutral authority object rather than a signed bearer token. It is verified against the exact execution, policy, runtime, epoch, and validity window; the AgentContainment controller remains the runtime enforcement boundary. Asymmetric Warrant attestation is a future trust-model extension.
+Today the Warrant is a typed, transport-neutral authority object rather than the credential that the runtime ActionGateway consumes directly. WarrantKit verifies it against the exact execution, policy, runtime, epoch, and validity window at authority boundaries. AgentContainment's controller and ActionGateway remain the runtime enforcement boundary, using controller-owned execution leases that are invalidated by runtime state changes. Ed25519 signing/verification is shipped as an optional attestation layer; it does not make a signed Warrant authoritative by itself.
 
 A Warrant answers:
 
@@ -45,10 +45,29 @@ It does not establish that an action was safe, that agent intent was correct, or
 
 Evidence never grants authority, and a Warrant is never derived from evidence.
 
+### Trust boundary: who checks the authority?
+
+A Warrant is not useful merely because an agent possesses a serialized object. The enforcement point must check authority before an action reaches the protected side effect.
+
+In the current implementation, the split is explicit:
+
+- **WarrantKit** validates Warrant authority at admission and recovery boundaries against the exact execution, policy, runtime, epoch, and validity window.
+- **AgentContainment's ActionGateway** is the runtime action enforcement point. It evaluates each action and executes it only through a controller-owned execution lease; containment invalidates that lease before a later side effect can run.
+- **The Warrant is not currently a bearer credential accepted directly by ActionGateway.** A replayed serialized Warrant therefore cannot, by itself, invoke a tool, write a production database, or call a payments API. The gateway consumes runtime-owned execution authority.
+
+That distinction matters. If a future integration makes serialized Warrants directly consumable by an action gateway, it must authenticate issuance as well as check epoch. The current core does not maintain a durable Warrant issuance registry, so an arbitrary unsigned serialized Warrant must not be treated as self-authenticating. The shipped Ed25519 attestation layer can authenticate a Warrant when a deployment establishes a trusted public-key anchor.
+
+### Epoch fencing versus short-lived credentials
+
+A short-lived credential gives a time-based upper bound on stale authority. Epoch fencing gives an event-based invalidation boundary.
+
+For example, a Warrant with a 30-second TTL can remain usable for the rest of that 30-second window after containment unless the downstream system also maintains revocation state. An epoch-bound authority can become invalid immediately when containment advances the runtime epoch, without waiting for the TTL to expire.
+
+Epochs therefore do not replace expiry. They solve a different problem: **immediate invalidation tied to a security event rather than to the clock.**
+
 ### Trust questions
 
-- **Why not Macaroons/Biscuit?** WarrantKit currently defines an application-level authority contract bound to execution identity and runtime epoch rather than choosing a general-purpose bearer-token language; signed/distributed authority is a future trust-model decision.
-- **Is epoch just a fencing token?** It is used as a fencing token, but WarrantKit makes the epoch part of the authority validity contract: containment/recovery advances it so prior authority becomes stale.
+- **Why not Macaroons/Biscuit?** Those are general-purpose capability/bearer-token designs. WarrantKit's distinctive contract is the binding of runtime authority to execution identity and runtime epoch; Ed25519 is available when cryptographic attestation of the object is required.
 - **What does VERIFIED mean?** Only that the defined verification procedure and required evidence checks succeeded; it is not a truth oracle.
 
 ## Implementation status
@@ -63,13 +82,14 @@ Evidence never grants authority, and a Warrant is never derived from evidence.
 | Fail-closed recovery | **Implemented · CI-tested** | Failed recovery remains contained; fresh authority follows an authoritative epoch transition. |
 | Evidence envelopes and epoch scoping | **Implemented · CI-tested** | Runtime proof is bound to execution identity and epoch. |
 | HMAC-authenticated receipts | **Implemented · CI-tested** | Shared-secret authentication and tamper detection; not non-repudiable attestation. |
+| Ed25519 Warrant/receipt attestation | **Implemented · CI-tested** | Optional asymmetric authentication of Warrant/receipt artifacts; trust still depends on configured public-key anchors. |
 | Linux cgroup-v2 workload containment | **Implemented · privileged integration-tested** | Requires Linux cgroup v2 and the required host privileges/delegation. |
 | Adversarial containment/security regression tests | **Implemented · CI-tested** | Covers fail-closed and stale-authority/escape conditions in the tested environment. |
 | Local fleet governance primitives | **Implemented · CI-tested** | Inventory, assignment, rollout/reconciliation, and status history are local foundations. |
 | External evidence correlation | **Planned / partial** | Cross-source contracts and typed references exist; generalized correlation/reconciliation is not shipped. |
 | Hosted multi-tenant control plane | **Planned** | Centralized orchestration, durable retention, and enterprise RBAC are commercial work. |
 | Enterprise integrations | **Planned / integration-dependent** | IAM, SIEM/SOAR, deployment automation, and production integrations are not implied by the OSS foundation. |
-| Non-repudiable host attestation | **Planned** | Current receipts are HMAC-authenticated; stronger host-anchored attestation is future work. |
+| Non-repudiable host attestation | **Planned** | Ed25519 can authenticate an artifact; host-anchored attestation of the runtime itself remains future work. |
 
 WarrantKit pins the security-critical AgentContainment engine as a submodule. Warden, DProvenanceKit, and ClaimProofKit remain independent evidence sources rather than hard runtime dependencies.
 
@@ -89,7 +109,7 @@ WarrantKit currently provides the contracts and identity binding needed to relat
 
 ## Real workload proof
 
-The privileged Linux proof uses a real child process and a real cgroup-v2 boundary:
+The privileged Linux proof uses a real child process and a real cgroup-v2 boundary. It demonstrates containment of the workload and the stale-authority check; it is not a demonstration that an arbitrary serialized Warrant is itself an action-gateway credential:
 
 1. create a dedicated cgroup;
 2. launch a real workload and attach it;
@@ -103,13 +123,13 @@ The privileged Linux proof uses a real child process and a real cgroup-v2 bounda
 Run:
 
 ```bash
-AGENT_CONTAIN_RUN_REAL_CGROUP=1 WARRANTKIT_REAL_KILL_ARTIFACT=./real-kill-runtime-evidence.json \
-python tools/run_real_kill_demo.py
+sudo env AGENT_CONTAIN_RUN_REAL_CGROUP=1 WARRANTKIT_REAL_KILL_ARTIFACT=./real-kill-runtime-evidence.json \
+"$(command -v python)" tools/run_real_kill_demo.py
 ```
 
 The demo emits a portable evidence artifact and passes it through `tools/verify_runtime_evidence.py`. The fixture used by the verifier is a contract test; the real-kill path is the host-dependent proof. The lower-level pytest remains available for regression coverage.
 
-**What this proves:** the tested Linux environment can enforce the configured cgroup-v2 kill/fence boundary, reject replay of pre-containment authority after the epoch changes, produce runtime-pinned evidence, and have that artifact independently checked.
+**What this proves:** the tested Linux environment can enforce the configured cgroup-v2 kill/fence boundary, invalidate the runtime-owned execution lease after the epoch changes, produce runtime-pinned evidence, and have that artifact checked by the standalone verifier. The serialized Warrant is also rejected by WarrantKit's Warrant verifier after its epoch becomes stale; that verifier result is an authority-contract check, not the action gateway itself.
 
 **What this does not prove:** universal host isolation, arbitrary kernel/runtime security, reversal of already-completed side effects, formal verification, or non-repudiable host attestation.
 
@@ -187,9 +207,11 @@ WarrantKit complements existing isolation and runtime-security mechanisms rather
 
 | Technology | Primary boundary | WarrantKit's additional boundary |
 |---|---|---|
-| Tetragon | Kernel-level runtime observability and policy enforcement. | Explicit execution authority bound to runtime epoch, with containment/recovery invalidating stale authority. |
-| seccomp | Linux system-call filtering. | Agent-specific authority lifecycle, revocation, epoch fencing, recovery gating, and evidence semantics. |
-| gVisor | Sandboxed application-kernel boundary. | Authority and evidence lifecycle above the isolation boundary. |
+| OPA / Cedar | Policy decision. | Runtime-scoped authority lifecycle, revocation, epoch fencing, recovery gating, and evidence binding. |
+| cgroup-v2 | Process/resource containment. | A portable authority contract that identifies what execution is authorized to do and when that authority becomes stale. |
+| Capability tokens | Bearer authority. | Warrant authority is explicitly bound to execution/runtime state; Ed25519 can authenticate the object when needed. |
+| 30-second credentials + revocation list | Time-bounded authority plus explicit revocation state. | Epoch fencing gives immediate event-driven invalidation at a runtime-state transition instead of waiting for TTL expiry. |
+| gVisor / Tetragon / seccomp | Isolation, observability, or syscall enforcement at other layers. | WarrantKit coordinates authority lifecycle above those mechanisms rather than replacing them. |
 
 ## Threat model and non-goals
 
