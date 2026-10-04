@@ -106,6 +106,18 @@ def main() -> int:
         if authority_export is None:
             raise RuntimeError("runtime engine does not expose authority revocation evidence")
         authority = authority_export() if callable(authority_export) else authority_export
+        # Bind the exported authority record to this exact execution authority.
+        # The portable verifier must reject evidence transferred across a
+        # different execution, policy, or policy digest.
+        authority = dict(authority)
+        authority.update(
+            {
+                "execution_id": admission.identity.execution_id,
+                "policy_id": admission.identity.policy_id,
+                "policy_digest": admission.identity.policy_digest,
+            }
+        )
+        authority = _record_binding(authority)
 
         enforcement_export = getattr(report, "enforcement_evidence_record", None)
         if enforcement_export is None:

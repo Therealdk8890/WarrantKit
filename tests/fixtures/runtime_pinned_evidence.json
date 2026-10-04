@@ -21,10 +21,11 @@
     "runtime_binding": {
       "agent_id": "agent-fixture-1",
       "authority": {
-        "digest": "sha256:5a51fdca5c91c1645da8f9507fb5c4e5c8625f1c5af52483ae5dda9a41a0b284",
+        "digest": "sha256:653be4a429434b19ec144b4f8a186d7cc5b5b78f3ba416c8d52115a71db2648f",
         "record": {
           "agent_id": "agent-fixture-1", "epoch": 1, "revoked": true,
-          "revoked_at": "2026-09-30T12:00:01Z", "runtime_id": "runtime-fixture-1"
+          "revoked_at": "2026-09-30T12:00:01Z", "runtime_id": "runtime-fixture-1",
+          "execution_id": "exec-fixture-1", "policy_digest": "sha256:fixture-policy", "policy_id": "production"
         }
       },
       "enforcement": {

@@ -71,6 +71,12 @@ def verify(document: Mapping[str, Any]) -> None:
         if record.get("epoch") != binding["epoch"]: fail(f"runtime binding {label} epoch does not match")
 
     authority, enforcement, observation = (binding[x]["record"] for x in ("authority","enforcement","observation"))
+    # Bind runtime evidence to the exact authority presented for this execution.
+    # Shared runtime/agent/epoch identity alone is insufficient: evidence must
+    # not be transferable across distinct execution authorities.
+    for field in ("execution_id", "policy_id", "policy_digest"):
+        if authority.get(field) != execution.get(field):
+            fail(f"runtime binding authority {field} does not match execution")
     if authority.get("revoked") is not True: fail("runtime binding requires explicit authority revocation evidence")
     if enforcement.get("action") not in {"KILL","FENCE"}: fail("runtime binding enforcement action must be KILL or FENCE")
     if enforcement.get("external_boundary") is not True: fail("runtime binding enforcement must be external to the agent")
