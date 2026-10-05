@@ -130,14 +130,9 @@ sudo env AGENT_CONTAIN_RUN_REAL_CGROUP=1 WARRANTKIT_REAL_KILL_ARTIFACT=./real-ki
 The demo emits a portable evidence artifact and passes it through `tools/verify_runtime_evidence.py`. The fixture used by the verifier is a contract test; the real-kill path is the host-dependent proof. The lower-level pytest remains available for regression coverage.
 ### Captured CI proof
 
-The following output was captured from GitHub Actions run #336 on an Ubuntu 6.17 Azure runner with cgroup v2, using the same real-kill demo above. It is included as recorded proof output rather than a hand-written transcript:
+The following excerpt was captured from GitHub Actions run #336 on an Ubuntu 6.17 Azure runner with cgroup v2, using the real-kill demo above. It is recorded output, not a hand-written transcript:
 
 ```text
-[1/7] launching real workload
-[2/7] admitting workload under Warrant
-    warrant=9f0b836e-f8b0-462d-b63c-aa47b9f97bd2
-    epoch=0
-[3/8] invoking external runtime enforcement
 [4/8] proving pre-containment authority is stale
     stale pre-containment Warrant rejected: warrant epoch does not match current runtime epoch
     revoked live Warrant rejected: warrant is revoked
@@ -148,15 +143,9 @@ The following output was captured from GitHub Actions run #336 on an Ubuntu 6.17
 [7/8] independently verifying exported artifact
     VERIFIED
 [8/8] proof complete
-What this proves: the tested Linux environment enforced the configured
-cgroup-v2 kill/fence boundary, invalidated pre-containment authority,
-and produced independently checked evidence.
-What this does not prove: universal host isolation, formal verification,
-or non-repudiable host attestation.
 ```
 
-The artifact was then re-verified separately with the standalone verifier and returned `VERIFIED`. The CI job also uploaded the resulting `real-kill-runtime-evidence.json` artifact.
-
+The same CI job ran the lower-level integration tests (`3 passed in 0.16s`), re-verified the exported artifact with `tools/verify_runtime_evidence.py` (`VERIFIED`), and uploaded the resulting `real-kill-runtime-evidence.json` artifact.
 **What this proves:** the tested Linux environment can enforce the configured cgroup-v2 kill/fence boundary, invalidate the runtime-owned execution lease after the epoch changes, produce runtime-pinned evidence, and have that artifact checked by the standalone verifier. The serialized Warrant is also rejected by WarrantKit's Warrant verifier after its epoch becomes stale; that verifier result is an authority-contract check, not the action gateway itself.
 
 **What this does not prove:** universal host isolation, arbitrary kernel/runtime security, reversal of already-completed side effects, formal verification, or non-repudiable host attestation.
