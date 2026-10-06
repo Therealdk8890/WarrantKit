@@ -27,10 +27,13 @@ include = ["agentcontain*"]
 langchain = [
     "langchain>=1.0,<2",
 ]
+attestation = [
+    "cryptography>=42",
+]
 test = [
     "pytest>=7",
     "interleave-test @ git+https://github.com/Therealdk8890/interleave-test.git",
-    "cryptography>=42",
+    "warrantkit[attestation]",
 ]
 
 [tool.pytest.ini_options]
