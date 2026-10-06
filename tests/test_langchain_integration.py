@@ -1,6 +1,6 @@
 import pytest
 
-from agentcontain import Policy, admit, build_agentcontainment_engine, contain
+from agentcontain import Policy, admit, build_agentcontainment_engine, recontain
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 
@@ -60,7 +60,7 @@ def test_langchain_tool_rejects_after_runtime_containment() -> None:
     )
     wrapped = protected.wrap_langchain_tool(consequential_write, admission, gateway)
 
-    contain(admission)
+    recontain(admission)
 
     with pytest.raises(protected.LangChainWarrantError):
         wrapped.invoke({"value": "must-not-run"})
