@@ -409,7 +409,7 @@ def test_failed_recovery_recontains_platform_state():
         recover(admission, issue_recovery_authorization(admission))
 
     assert admission.machine.state.value == "contained"
-    assert admission.machine.events.events[-1].name == "recontainment_verified"
+    assert admission.machine.events.events[-1].name == "recovery_failed_containment_restored"
 
 
 def test_recontain_requires_runtime_verification():
