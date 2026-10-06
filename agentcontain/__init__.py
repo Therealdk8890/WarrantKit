@@ -23,7 +23,6 @@ from .external_authorization import ExternalAuthorizationDecision, import_author
 from .external_evidence import ExternalEvidenceReference, digest_artifact
 from .external_handoff import CorrelationState, ExternalEvidenceHandoff, HandoffCorrelation, correlate_handoff
 from .verification_result import VerificationResult, VerificationStatus, compose_verification
-from .attestation import AttestationEnvelope, Ed25519Signer, Ed25519Verifier
 from .fleet import Agent, FleetRegistry, FleetScope, Organization, Project, Runtime
 from .fleet_status import FleetPolicyStatus, fleet_policy_status
 from .fleet_status_history import FleetPolicyStatusHistory, FleetPolicyStatusSnapshot
@@ -54,6 +53,18 @@ from .warrant import (
     verify_warrant,
 )
 from .store import EvidenceStore, InMemoryEvidenceStore
+
+_ATTESTATION_EXPORTS = frozenset({"AttestationEnvelope", "Ed25519Signer", "Ed25519Verifier"})
+
+
+def __getattr__(name: str):
+    """Load optional attestation primitives only when explicitly requested."""
+    if name in _ATTESTATION_EXPORTS:
+        from . import attestation
+
+        return getattr(attestation, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Admission",
