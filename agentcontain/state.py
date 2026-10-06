@@ -106,6 +106,13 @@ class PlatformStateMachine:
             event_name="runtime_recovery_complete",
         )
 
+    def recovery_failed(self) -> Event:
+        """Restore platform state to contained after a failed recovery attempt."""
+        return self.transition(
+            LifecycleState.CONTAINED,
+            event_name="recovery_failed_containment_restored",
+        )
+
     def recontain(self) -> Event:
         """Record a fresh enforcement verification for an already-contained runtime."""
         if self.state is not LifecycleState.CONTAINED:
