@@ -107,14 +107,15 @@ class PlatformStateMachine:
         )
 
     def recontain(self) -> Event:
-        if self.state == LifecycleState.CONTAINED:
-            self._sequence += 1
-            event = Event.create(
-                "recontainment_verified",
-                self.identity.execution_id,
-                self.identity.epoch,
-                self._sequence,
-            )
-            self.events.append(event)
-            return event
-        return self.transition(LifecycleState.CONTAINED, event_name="recontainment_verified")
+        """Record a fresh enforcement verification for an already-contained runtime."""
+        if self.state is not LifecycleState.CONTAINED:
+            raise ValueError("recontainment requires an already-contained runtime")
+        self._sequence += 1
+        event = Event.create(
+            "recontainment_verified",
+            self.identity.execution_id,
+            self.identity.epoch,
+            self._sequence,
+        )
+        self.events.append(event)
+        return event
