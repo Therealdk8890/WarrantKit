@@ -449,7 +449,7 @@ def recover(admission: Admission, authorization) -> int:
         # The runtime controller is fail-closed and remains contained on
         # failed recovery. Reflect that compensation in the platform event log.
         if admission.machine.state.value == "recovering":
-            admission.machine.recontain()
+            admission.machine.recovery_failed()
         raise
     admission.machine.recovered(epoch)
     admission.identity = admission.machine.identity
