@@ -464,7 +464,9 @@ def recover(admission: Admission, authorization) -> int:
 
 @_synchronized
 def recontain(admission: Admission):
-    """Re-verify external enforcement without granting execution authority."""
+    """Re-verify external enforcement after containment without granting authority."""
+    if admission.machine.state.value != "contained":
+        raise RuntimeError("recontainment requires an already-contained runtime")
     operation = getattr(admission.engine, "recontain_enforcers", None)
     if operation is None:
         raise RuntimeError("enforcement engine does not expose recontainment")
