@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from ..engine import Admission
 from ..warrant import RevocationState, verify_warrant
@@ -100,7 +101,7 @@ def wrap_langchain_tool(
 
         action = Action(
             agent_id=admission.identity.agent_id,
-            action_id=f"langchain:{admission.identity.execution_id}:{operation}",
+            action_id=f"langchain:{admission.identity.execution_id}:{uuid4()}",
             operation=operation,
             resource=resource,
             risk=risk,
