@@ -26,6 +26,54 @@ warrantkit demo
 
 For actual host enforcement, use the environment-gated Linux proof below.
 
+## LangChain integration
+
+WarrantKit can wrap an existing LangChain tool so the model-facing tool schema stays unchanged while execution crosses the Warrant and AgentContainment boundaries.
+
+Install the optional integration:
+
+```bash
+python -m pip install "warrantkit[langchain]"
+```
+
+Then protect a tool by giving the execution Warrant an explicit capability matching the tool operation:
+
+```python
+from langchain.agents import create_agent
+from langchain_core.tools import tool
+from agent_containment.gateway import ActionGateway
+from agent_containment.policy import PolicyEngine
+from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.integrations.langchain import wrap_langchain_tool
+
+@tool
+def payments_refund(amount: int) -> str:
+    """Issue a payment refund."""
+    return f"refunded:{amount}"
+
+engine = build_agentcontainment_engine("payments-agent")
+admission = admit(
+    Policy("payments", capabilities=("payments_refund",)),
+    agent_id="payments-agent",
+    engine=engine,
+    runtime_id=engine.runtime_id,
+)
+
+gateway = ActionGateway(PolicyEngine(), engine.controller)
+protected_refund = wrap_langchain_tool(
+    payments_refund,
+    admission,
+    gateway,
+)
+
+agent = create_agent(model, tools=[protected_refund])
+```
+
+The wrapper verifies the current Warrant, requires the corresponding capability, and executes the underlying tool through AgentContainment's controller-owned ActionGateway. If containment advances the runtime epoch, the retained Warrant is rejected before the underlying tool is invoked.
+
+The first integration deliberately uses LangChain's synchronous tool invocation path so the runtime lease and actual tool side effect remain inside the same controller-owned execution boundary. Async-native tool execution is not claimed by this integration yet.
+
+
 ## What is a Warrant?
 
 A **Warrant** is WarrantKit's portable authority contract for one execution. It binds execution identity, accepted policy identity and digest, runtime identity and epoch, validity/revocation state, capabilities, constraints, and required evidence.
