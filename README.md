@@ -83,6 +83,20 @@ The base package and 30-second no-root demo do not require the attestation depen
 
 
 
+## End-to-end authority boundary proof
+
+The fastest way to see the security boundary is the deterministic framework proof. It uses a real LangChain tool but no LLM, network, or API key:
+
+```bash
+python -m pip install ./AgentContainment
+python -m pip install ".[langchain]"
+python tools/run_authority_boundary_demo.py
+```
+
+The proof performs a real tool side effect while authority is valid, externally contains the execution, rejects a serialized pre-containment Warrant at the new epoch, rejects the retained framework tool, and verifies that the underlying side effect was never reached after containment.
+
+This is the framework-level proof. The privileged Linux demo below separately proves actual cgroup-v2 workload termination.
+
 ## CrewAI integration
 
 WarrantKit can also wrap a CrewAI BaseTool without changing the agent-facing tool contract. CrewAI remains the framework layer; WarrantKit verifies authority and AgentContainment remains the controller-owned enforcement boundary.
