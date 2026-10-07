@@ -26,6 +26,67 @@ warrantkit demo
 
 For actual host enforcement, use the environment-gated Linux proof below.
 
+## See the authority boundary work
+
+The fastest way to understand WarrantKit is to run the deterministic framework proof. It uses a real LangChain tool, but no LLM, network, or API key.
+
+```bash
+python -m pip install ./AgentContainment
+python -m pip install ".[langchain]"
+python tools/run_authority_boundary_demo.py
+```
+
+The sequence is deliberately concrete:
+
+```text
+Warrant + capability
+        ↓
+protected tool call → side effect succeeds
+        ↓
+external containment
+        ↓
+runtime epoch 0 → 1
+        ↓
+serialized old Warrant → REJECTED
+retained framework tool → REJECTED
+        ↓
+second side effect → NEVER REACHED
+```
+
+Recorded CI output from the proof:
+
+```text
+[1/5] admitting a tool-using execution under a Warrant
+[2/5] invoking the protected tool before containment
+    side effect executed: refunded:25
+[3/5] externally containing the execution
+    runtime epoch advanced to 1
+[4/5] proving retained authority cannot be replayed
+    serialized pre-containment Warrant rejected: warrant epoch does not match current runtime epoch
+    protected tool rejected: Warrant verification failed: warrant is revoked
+[5/5] proving the underlying side effect was never reached
+    side-effect calls=[25]
+proof complete
+```
+
+**What this proves:** a framework tool can be placed behind WarrantKit authority and an external AgentContainment action boundary; after containment, retained authority is rejected before the underlying tool executes.
+
+**What this does not prove:** kernel-level workload termination, universal host isolation, or that a serialized Warrant is itself a bearer credential accepted by the ActionGateway. The privileged Linux proof below covers the kernel enforcement boundary separately.
+
+## End-to-end authority boundary proof
+
+The fastest way to see the security boundary is the deterministic framework proof. It uses a real LangChain tool but no LLM, network, or API key:
+
+```bash
+python -m pip install ./AgentContainment
+python -m pip install ".[langchain]"
+python tools/run_authority_boundary_demo.py
+```
+
+The proof performs a real tool side effect while authority is valid, externally contains the execution, rejects a serialized pre-containment Warrant at the new epoch, rejects the retained framework tool, and verifies that the underlying side effect was never reached after containment.
+
+This is the framework-level proof. The privileged Linux demo below separately proves actual cgroup-v2 workload termination.
+
 ## LangChain integration
 
 WarrantKit can wrap an existing LangChain tool so the model-facing tool schema stays unchanged while execution crosses the Warrant and AgentContainment boundaries.
@@ -82,20 +143,6 @@ python -m pip install "warrantkit[attestation]"
 The base package and 30-second no-root demo do not require the attestation dependency.
 
 
-
-## End-to-end authority boundary proof
-
-The fastest way to see the security boundary is the deterministic framework proof. It uses a real LangChain tool but no LLM, network, or API key:
-
-```bash
-python -m pip install ./AgentContainment
-python -m pip install ".[langchain]"
-python tools/run_authority_boundary_demo.py
-```
-
-The proof performs a real tool side effect while authority is valid, externally contains the execution, rejects a serialized pre-containment Warrant at the new epoch, rejects the retained framework tool, and verifies that the underlying side effect was never reached after containment.
-
-This is the framework-level proof. The privileged Linux demo below separately proves actual cgroup-v2 workload termination.
 
 ## CrewAI integration
 
