@@ -33,16 +33,19 @@ def _verify_current_authority(admission: Admission, gateway) -> None:
     if warrant is None:
         raise CrewAIWarrantError("execution has no Warrant authority")
     snapshot = _current_runtime(admission, gateway).snapshot()
-    verify_warrant(
-        warrant,
-        execution_id=admission.identity.execution_id,
-        agent_id=admission.identity.agent_id,
-        policy_id=admission.identity.policy_id,
-        policy_digest=admission.identity.policy_digest,
-        runtime_id=snapshot.runtime_id,
-        epoch=snapshot.epoch,
-        now=datetime.now(timezone.utc),
-    )
+    try:
+        verify_warrant(
+            warrant,
+            execution_id=admission.identity.execution_id,
+            agent_id=admission.identity.agent_id,
+            policy_id=admission.identity.policy_id,
+            policy_digest=admission.identity.policy_digest,
+            runtime_id=snapshot.runtime_id,
+            epoch=snapshot.epoch,
+            now=datetime.now(timezone.utc),
+        )
+    except ValueError as exc:
+        raise CrewAIWarrantError(f"Warrant verification failed: {exc}") from exc
     if warrant.lifecycle.state is RevocationState.REVOKED:
         raise CrewAIWarrantError("Warrant is revoked")
 
