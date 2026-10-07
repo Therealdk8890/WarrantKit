@@ -114,12 +114,14 @@ def wrap_crewai_tool(
             )
         return result
 
+    from pydantic import BaseModel
+
     class ProtectedCrewAITool(BaseTool):
         name: str = operation
         description: str = (
             original_description or f"WarrantKit-protected {operation}"
         )
-        args_schema = original_args_schema
+        args_schema: type[BaseModel] | None = original_args_schema
 
         def _run(self, *args: Any, **kwargs: Any) -> Any:
             if args:
