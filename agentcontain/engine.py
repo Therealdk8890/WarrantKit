@@ -449,7 +449,7 @@ def recover(admission: Admission, authorization) -> int:
         # The runtime controller is fail-closed and remains contained on
         # failed recovery. Reflect that compensation in the platform event log.
         if admission.machine.state.value == "recovering":
-            admission.machine.recontain()
+            admission.machine.recovery_failed()
         raise
     admission.machine.recovered(epoch)
     admission.identity = admission.machine.identity
@@ -464,7 +464,9 @@ def recover(admission: Admission, authorization) -> int:
 
 @_synchronized
 def recontain(admission: Admission):
-    """Re-verify external enforcement without granting execution authority."""
+    """Re-verify external enforcement after containment without granting authority."""
+    if admission.machine.state.value != "contained":
+        raise RuntimeError("recontainment requires an already-contained runtime")
     operation = getattr(admission.engine, "recontain_enforcers", None)
     if operation is None:
         raise RuntimeError("enforcement engine does not expose recontainment")

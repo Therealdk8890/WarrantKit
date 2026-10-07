@@ -73,6 +73,14 @@ The wrapper verifies the current Warrant, requires the corresponding capability,
 
 The first integration deliberately uses LangChain's synchronous tool invocation path so the runtime lease and actual tool side effect remain inside the same controller-owned execution boundary. Async-native tool execution is not claimed by this integration yet.
 
+For Ed25519 Warrant and receipt attestation, install the optional cryptographic dependency explicitly:
+
+```bash
+python -m pip install "warrantkit[attestation]"
+```
+
+The base package and 30-second no-root demo do not require the attestation dependency.
+
 
 ## What is a Warrant?
 

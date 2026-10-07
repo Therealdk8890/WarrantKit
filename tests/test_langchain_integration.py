@@ -1,6 +1,6 @@
 import pytest
 
-from agentcontain import Policy, admit, build_agentcontainment_engine, recontain
+from agentcontain import Policy, admit, build_agentcontainment_engine, contain, recontain
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 
@@ -60,7 +60,7 @@ def test_langchain_tool_rejects_after_runtime_containment() -> None:
     )
     wrapped = protected.wrap_langchain_tool(consequential_write, admission, gateway)
 
-    recontain(admission)
+    contain(admission)
 
     with pytest.raises(protected.LangChainWarrantError):
         wrapped.invoke({"value": "must-not-run"})
@@ -98,3 +98,21 @@ def test_langchain_tool_rejects_missing_capability_before_side_effect() -> None:
         wrapped.invoke({"value": "must-not-run"})
 
     assert calls == []
+
+
+def test_recontainment_requires_prior_containment() -> None:
+    from agentcontain import Policy, admit, build_agentcontainment_engine
+
+    engine = build_agentcontainment_engine("agent-recontain-precondition")
+    admission = admit(
+        Policy("writes", capabilities=("write",)),
+        agent_id="agent-recontain-precondition",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+    )
+
+    with pytest.raises(RuntimeError, match="already-contained"):
+        recontain(admission)
+
+    assert admission.machine.state.value == "admitted"
+    assert admission.identity.epoch == 0
