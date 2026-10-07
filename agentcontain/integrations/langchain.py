@@ -35,16 +35,19 @@ def _verify_current_authority(admission: Admission, gateway) -> None:
         raise LangChainWarrantError("execution has no Warrant authority")
     runtime = _current_runtime(admission, gateway)
     snapshot = runtime.snapshot()
-    verify_warrant(
-        warrant,
-        execution_id=admission.identity.execution_id,
-        agent_id=admission.identity.agent_id,
-        policy_id=admission.identity.policy_id,
-        policy_digest=admission.identity.policy_digest,
-        runtime_id=snapshot.runtime_id,
-        epoch=snapshot.epoch,
-        now=datetime.now(timezone.utc),
-    )
+    try:
+        verify_warrant(
+            warrant,
+            execution_id=admission.identity.execution_id,
+            agent_id=admission.identity.agent_id,
+            policy_id=admission.identity.policy_id,
+            policy_digest=admission.identity.policy_digest,
+            runtime_id=snapshot.runtime_id,
+            epoch=snapshot.epoch,
+            now=datetime.now(timezone.utc),
+        )
+    except ValueError as exc:
+        raise LangChainWarrantError(f"Warrant verification failed: {exc}") from exc
     if warrant.lifecycle.state is RevocationState.REVOKED:
         raise LangChainWarrantError("Warrant is revoked")
 
