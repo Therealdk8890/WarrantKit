@@ -27,6 +27,9 @@ include = ["agentcontain*"]
 langchain = [
     "langchain>=1.0,<2",
 ]
+crewai = [
+    "crewai>=1.15,<2",
+]
 attestation = [
     "cryptography>=42",
 ]

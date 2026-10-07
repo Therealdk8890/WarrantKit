@@ -82,6 +82,59 @@ python -m pip install "warrantkit[attestation]"
 The base package and 30-second no-root demo do not require the attestation dependency.
 
 
+
+## End-to-end authority boundary proof
+
+The fastest way to see the security boundary is the deterministic framework proof. It uses a real LangChain tool but no LLM, network, or API key:
+
+```bash
+python -m pip install ./AgentContainment
+python -m pip install ".[langchain]"
+python tools/run_authority_boundary_demo.py
+```
+
+The proof performs a real tool side effect while authority is valid, externally contains the execution, rejects a serialized pre-containment Warrant at the new epoch, rejects the retained framework tool, and verifies that the underlying side effect was never reached after containment.
+
+This is the framework-level proof. The privileged Linux demo below separately proves actual cgroup-v2 workload termination.
+
+## CrewAI integration
+
+WarrantKit can also wrap a CrewAI BaseTool without changing the agent-facing tool contract. CrewAI remains the framework layer; WarrantKit verifies authority and AgentContainment remains the controller-owned enforcement boundary.
+
+Install the optional integration:
+
+~~~bash
+python -m pip install "warrantkit[crewai]"
+~~~
+
+Then wrap an existing CrewAI tool:
+
+~~~python
+from agent_containment.gateway import ActionGateway
+from agent_containment.policy import PolicyEngine
+from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.integrations.crewai import wrap_crewai_tool
+
+engine = build_agentcontainment_engine("payments-agent")
+admission = admit(
+    Policy("payments", capabilities=("payments_refund",)),
+    agent_id="payments-agent",
+    engine=engine,
+    runtime_id=engine.runtime_id,
+)
+
+gateway = ActionGateway(PolicyEngine(), engine.controller)
+protected_refund = wrap_crewai_tool(
+    payments_refund_tool,
+    admission,
+    gateway,
+)
+
+agent = Agent(..., tools=[protected_refund])
+~~~
+
+The adapter verifies the current Warrant and required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
+
 ## What is a Warrant?
 
 A **Warrant** is WarrantKit's portable authority contract for one execution. It binds execution identity, accepted policy identity and digest, runtime identity and epoch, validity/revocation state, capabilities, constraints, and required evidence.

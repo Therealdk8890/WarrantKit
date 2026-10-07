@@ -1,9 +1,8 @@
-"""LangChain tool integration for WarrantKit.
+"""CrewAI tool integration for WarrantKit.
 
 The adapter places Warrant verification and AgentContainment's ActionGateway
-around an existing LangChain tool. It does not make LangChain a security
-boundary: the controller-owned gateway remains the final runtime enforcement
-point.
+around an existing CrewAI tool. CrewAI remains outside the security boundary:
+the controller-owned gateway is the final runtime enforcement point.
 """
 from __future__ import annotations
 
@@ -15,16 +14,16 @@ from ..engine import Admission
 from ..warrant import RevocationState, verify_warrant
 
 
-class LangChainWarrantError(RuntimeError):
-    """Raised when a LangChain tool call is not authorized by WarrantKit."""
+class CrewAIWarrantError(RuntimeError):
+    """Raised when a CrewAI tool call is not authorized by WarrantKit."""
 
 
 def _current_runtime(admission: Admission, gateway):
     runtime = getattr(gateway, "containment", None)
     runtime = getattr(runtime, "runtime", None)
     if runtime is None:
-        raise LangChainWarrantError(
-            "WarrantKit LangChain integration requires an AgentContainment ActionGateway"
+        raise CrewAIWarrantError(
+            "WarrantKit CrewAI integration requires an AgentContainment ActionGateway"
         )
     return runtime
 
@@ -32,9 +31,8 @@ def _current_runtime(admission: Admission, gateway):
 def _verify_current_authority(admission: Admission, gateway) -> None:
     warrant = admission.warrant
     if warrant is None:
-        raise LangChainWarrantError("execution has no Warrant authority")
-    runtime = _current_runtime(admission, gateway)
-    snapshot = runtime.snapshot()
+        raise CrewAIWarrantError("execution has no Warrant authority")
+    snapshot = _current_runtime(admission, gateway).snapshot()
     try:
         verify_warrant(
             warrant,
@@ -47,31 +45,25 @@ def _verify_current_authority(admission: Admission, gateway) -> None:
             now=datetime.now(timezone.utc),
         )
     except ValueError as exc:
-        raise LangChainWarrantError(f"Warrant verification failed: {exc}") from exc
+        raise CrewAIWarrantError(f"Warrant verification failed: {exc}") from exc
     if warrant.lifecycle.state is RevocationState.REVOKED:
-        raise LangChainWarrantError("Warrant is revoked")
+        raise CrewAIWarrantError("Warrant is revoked")
 
 
-def wrap_langchain_tool(
+def wrap_crewai_tool(
     tool,
     admission: Admission,
     gateway=None,
     *,
     capability: str | None = None,
     risk: int = 0,
-    resource: str = "langchain-tool",
+    resource: str = "crewai-tool",
 ):
-    """Wrap a LangChain tool with WarrantKit authority and runtime enforcement.
+    """Wrap an existing CrewAI tool with WarrantKit authority.
 
-    The capability defaults to the LangChain tool name. The execution Warrant
-    must therefore explicitly authorize the tool operation. The underlying
-    LangChain tool is executed only inside AgentContainment's synchronous
-    ActionGateway lease boundary.
-
-    The wrapper deliberately uses the tool's synchronous invoke path. This
-    keeps the runtime lease and the actual tool side effect in the same
-    controller-owned execution boundary. Async-native tool execution is not
-    claimed by this first integration.
+    The capability defaults to the CrewAI tool name. The wrapped tool is
+    executed only through AgentContainment's synchronous ActionGateway lease.
+    Async-native execution is deliberately not claimed by this integration.
     """
     if gateway is None:
         raise ValueError(
@@ -82,21 +74,26 @@ def wrap_langchain_tool(
         raise ValueError("risk must be between 0 and 100")
 
     try:
-        from langchain_core.tools import StructuredTool
+        from crewai.tools import BaseTool
     except ImportError as exc:
         raise RuntimeError(
-            "LangChain is not installed; install WarrantKit with the langchain extra"
+            "CrewAI is not installed; install WarrantKit with the crewai extra"
         ) from exc
+
+    if not isinstance(tool, BaseTool):
+        raise TypeError("wrap_crewai_tool expects a CrewAI BaseTool instance")
 
     operation = str(tool.name)
     required_capability = capability or operation
+    original_args_schema = getattr(tool, "args_schema", None)
+    original_description = getattr(tool, "description", None)
 
     def invoke_authorized(**kwargs: Any) -> Any:
         _verify_current_authority(admission, gateway)
         warrant = admission.warrant
         assert warrant is not None
         if required_capability not in warrant.authority.capabilities:
-            raise LangChainWarrantError(
+            raise CrewAIWarrantError(
                 f"Warrant does not grant capability '{required_capability}'"
             )
 
@@ -104,30 +101,34 @@ def wrap_langchain_tool(
 
         action = Action(
             agent_id=admission.identity.agent_id,
-            action_id=f"langchain:{admission.identity.execution_id}:{uuid4()}",
+            action_id=f"crewai:{admission.identity.execution_id}:{uuid4()}",
             operation=operation,
             resource=resource,
             risk=risk,
-            metadata={"framework": "langchain"},
+            metadata={"framework": "crewai"},
         )
         result = gateway.execute(
             action,
-            lambda _action: tool.invoke(kwargs),
+            lambda _action: tool.run(**kwargs),
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
-            raise LangChainWarrantError(
+            raise CrewAIWarrantError(
                 f"AgentContainment denied '{operation}': {result.reason}"
             )
         return result
 
-    args_schema = getattr(tool, "args_schema", None)
-    if args_schema is None:
-        args_schema = getattr(tool, "args", None)
+    from pydantic import BaseModel
 
-    return StructuredTool.from_function(
-        func=invoke_authorized,
-        name=operation,
-        description=getattr(tool, "description", None) or f"WarrantKit-protected {operation}",
-        args_schema=args_schema,
-        infer_schema=args_schema is None,
-    )
+    class ProtectedCrewAITool(BaseTool):
+        name: str = operation
+        description: str = (
+            original_description or f"WarrantKit-protected {operation}"
+        )
+        args_schema: type[BaseModel] | None = original_args_schema
+
+        def _run(self, *args: Any, **kwargs: Any) -> Any:
+            if args:
+                raise CrewAIWarrantError("positional CrewAI tool arguments are not supported")
+            return invoke_authorized(**kwargs)
+
+    return ProtectedCrewAITool()
