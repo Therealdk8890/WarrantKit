@@ -73,20 +73,6 @@ proof complete
 
 **What this does not prove:** kernel-level workload termination, universal host isolation, or that a serialized Warrant is itself a bearer credential accepted by the ActionGateway. The privileged Linux proof below covers the kernel enforcement boundary separately.
 
-## End-to-end authority boundary proof
-
-The fastest way to see the security boundary is the deterministic framework proof. It uses a real LangChain tool but no LLM, network, or API key:
-
-```bash
-python -m pip install ./AgentContainment
-python -m pip install ".[langchain]"
-python tools/run_authority_boundary_demo.py
-```
-
-The proof performs a real tool side effect while authority is valid, externally contains the execution, rejects a serialized pre-containment Warrant at the new epoch, rejects the retained framework tool, and verifies that the underlying side effect was never reached after containment.
-
-This is the framework-level proof. The privileged Linux demo below separately proves actual cgroup-v2 workload termination.
-
 ## LangChain integration
 
 WarrantKit can wrap an existing LangChain tool so the model-facing tool schema stays unchanged while execution crosses the Warrant and AgentContainment boundaries.
@@ -142,13 +128,9 @@ python -m pip install "warrantkit[attestation]"
 
 The base package and 30-second no-root demo do not require the attestation dependency.
 
-
-
 ## CrewAI integration
 
 WarrantKit can also wrap a CrewAI BaseTool without changing the agent-facing tool contract. CrewAI remains the framework layer; WarrantKit verifies authority and AgentContainment remains the controller-owned enforcement boundary.
-
-Install the optional integration:
 
 ~~~bash
 python -m pip install "warrantkit[crewai]"
@@ -284,6 +266,7 @@ sudo env AGENT_CONTAIN_RUN_REAL_CGROUP=1 WARRANTKIT_REAL_KILL_ARTIFACT=./real-ki
 ```
 
 The demo emits a portable evidence artifact and passes it through `tools/verify_runtime_evidence.py`. The fixture used by the verifier is a contract test; the real-kill path is the host-dependent proof. The lower-level pytest remains available for regression coverage.
+
 ### Captured CI proof
 
 The following excerpt was captured from GitHub Actions run #336 on an Ubuntu 6.17 Azure runner with cgroup v2, using the real-kill demo above. It is recorded output, not a hand-written transcript:
@@ -358,7 +341,7 @@ The old Warrant is not "revoked later" as the security boundary. Its runtime epo
 
 The agent is not trusted to kill itself.
 
-```
+```text
 Detect violation
       ↓
 Revoke authority
@@ -419,7 +402,7 @@ These primitives describe desired state and fleet status. They do not constitute
 
 ## Architecture
 
-```
+```text
                          WarrantKit
               authority / lifecycle / evidence
                          │
