@@ -120,6 +120,44 @@ The wrapper verifies the current Warrant, requires the corresponding capability,
 
 The first integration deliberately uses LangChain's synchronous tool invocation path so the runtime lease and actual tool side effect remain inside the same controller-owned execution boundary. Async-native tool execution is not claimed by this integration yet.
 
+
+### Native middleware path
+
+For LangChain 1.x applications, WarrantKit also provides a native `wrap_tool_call` middleware integration. This protects the framework's existing tool objects instead of replacing them with wrapper tools.
+
+```bash
+python -m pip install "warrantkit[langchain]"
+```
+
+Use the middleware when you want one controller-owned authority boundary around the agent's tool execution path:
+
+```python
+from langchain.agents import create_agent
+from agentcontain.integrations.langchain_middleware import warrantkit_middleware
+
+middleware = warrantkit_middleware(admission, gateway)
+
+agent = create_agent(
+    model,
+    tools=[payments_refund, payments_lookup],
+    middleware=[middleware],
+)
+```
+
+The middleware derives the default capability from each tool name and can override that mapping explicitly:
+
+```python
+middleware = warrantkit_middleware(
+    admission,
+    gateway,
+    capabilities={"refund": "payments_refund"},
+)
+```
+
+Authority is checked before the LangChain tool handler is allowed to run. AgentContainment's ActionGateway remains the final enforcement point. If containment advances the runtime epoch, retained authority is rejected before the handler and its side effect are reached.
+
+This path is synchronous in v1; async-native middleware execution is not claimed yet.
+
 For Ed25519 Warrant and receipt attestation, install the optional cryptographic dependency explicitly:
 
 ```bash
