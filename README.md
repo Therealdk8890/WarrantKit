@@ -327,6 +327,74 @@ The same CI job ran the lower-level integration tests (`3 passed in 0.16s`), re-
 
 **What this does not prove:** universal host isolation, arbitrary kernel/runtime security, reversal of already-completed side effects, formal verification, or non-repudiable host attestation.
 
+## Incident bundle
+
+The privileged Linux proof can export one portable incident bundle that reconstructs the security-relevant lifecycle for a single execution:
+
+```text
+authority issued
+      ↓
+runtime epoch 0
+      ↓
+external containment
+      ↓
+runtime epoch 1
+      ↓
+old Warrant rejected
+      ↓
+workload terminated
+      ↓
+runtime evidence independently verified
+      ↓
+signed incident bundle
+```
+
+Request the bundle while running the real-kill proof:
+
+```bash
+python -m pip install ".[attestation]"
+sudo env \
+  AGENT_CONTAIN_RUN_REAL_CGROUP=1 \
+  WARRANTKIT_REAL_KILL_ARTIFACT=./incident-bundle/runtime-evidence.json \
+  WARRANTKIT_INCIDENT_BUNDLE_DIR=./incident-bundle \
+  "$(command -v python)" tools/run_real_kill_demo.py
+```
+
+The bundle contains:
+
+- `authority-issued.json` — the exact pre-containment Warrant.
+- `containment-event.json` — the external containment result and epoch transition.
+- `runtime-evidence.json` — the runtime-pinned evidence envelope.
+- `external-proof.json` — the independently observed terminal runtime state.
+- `provenance.json` — how the bundle relates to the captured proof and verifier.
+- `manifest.json` — SHA-256 digests and explicit claim limitations.
+- `verification-receipt.json` — an Ed25519-authenticated receipt over the manifest.
+- `public-key.json` — the demo verification key.
+
+Verify the bundle independently:
+
+```bash
+python tools/verify_incident_bundle.py ./incident-bundle
+```
+
+For a real deployment, the proof can sign with a deployment-owned Ed25519 PEM key:
+
+```bash
+WARRANTKIT_INCIDENT_SIGNING_KEY_FILE=/secure/incident-signing-key.pem \
+WARRANTKIT_INCIDENT_SIGNING_KEY_ID=prod-incident-signing \
+WARRANTKIT_INCIDENT_BUNDLE_DIR=./incident-bundle \
+sudo -E "$(command -v python)" tools/run_real_kill_demo.py
+```
+
+An auditor can then verify with the public key obtained independently from that deployment trust anchor:
+
+```bash
+python tools/verify_incident_bundle.py ./incident-bundle \
+  --trusted-public-key "<base64-ed25519-public-key>"
+```
+
+The default demo key proves bundle integrity but is **not** itself an organizational trust anchor. The bundle also does not claim that verified evidence makes an agent claim true, or that the tested Linux boundary provides universal host isolation.
+
 ## Evidence and verification
 
 The portable evidence contract distinguishes:

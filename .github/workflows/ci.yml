@@ -127,17 +127,22 @@ jobs:
       - name: Run operator-facing real-kill evidence proof
         env:
           AGENT_CONTAIN_RUN_REAL_CGROUP: "1"
-          WARRANTKIT_REAL_KILL_ARTIFACT: ./real-kill-runtime-evidence.json
+          WARRANTKIT_REAL_KILL_ARTIFACT: ./incident-bundle/runtime-evidence.json
+          WARRANTKIT_INCIDENT_BUNDLE_DIR: ./incident-bundle
         run: |
           sudo -E "$pythonLocation/bin/python" tools/run_real_kill_demo.py
 
       - name: Re-verify exported real-kill artifact
         run: |
-          python tools/verify_runtime_evidence.py ./real-kill-runtime-evidence.json
+          python tools/verify_runtime_evidence.py ./incident-bundle/runtime-evidence.json
 
-      - name: Upload real-kill evidence artifact
+      - name: Independently verify signed incident bundle
+        run: |
+          python tools/verify_incident_bundle.py ./incident-bundle
+
+      - name: Upload real-kill incident bundle
         uses: actions/upload-artifact@v4
         with:
-          name: real-kill-runtime-evidence
-          path: real-kill-runtime-evidence.json
+          name: real-kill-incident-bundle
+          path: incident-bundle/
           if-no-files-found: error
