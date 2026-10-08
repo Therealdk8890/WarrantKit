@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+"""Microbenchmark the real WarrantKit LangChain wrapper and ActionGateway.
+
+No LLM, network, or external service is involved. Results are local-process
+measurements, not production capacity claims. Run after installing the repo and
+its LangChain extra:
+  python tools/benchmark_gateway_overhead.py --calls 10000 --warmup 500
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import platform
+import statistics
+import time
+from types import SimpleNamespace
+from datetime import datetime, timezone
+
+from langchain_core.tools import tool
+from agent_containment.gateway import ActionGateway
+from agent_containment.policy import PolicyEngine
+from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.integrations.langchain import wrap_langchain_tool
+from agentcontain.integrations.langchain_middleware import WarrantKitMiddleware
+
+
+@tool
+def noop_tool(value: int) -> int:
+    """Return the input without doing I/O; isolates wrapper overhead."""
+    return value
+
+
+def summarize(samples_ns: list[int], total_seconds: float) -> dict[str, float | int]:
+    ordered = sorted(samples_ns)
+    def pct(p: float) -> float:
+        return ordered[min(len(ordered) - 1, int((len(ordered) - 1) * p))] / 1_000
+    return {
+        "calls": len(samples_ns),
+        "throughput_calls_s": round(len(samples_ns) / total_seconds, 1),
+        "latency_us_p50": round(statistics.median(samples_ns) / 1_000, 2),
+        "latency_us_p95": round(pct(0.95), 2),
+        "latency_us_p99": round(pct(0.99), 2),
+        "latency_us_mean": round(statistics.fmean(samples_ns) / 1_000, 2),
+    }
+
+
+def measure(call, count: int) -> dict[str, float | int]:
+    samples: list[int] = []
+    start_all = time.perf_counter()
+    for i in range(count):
+        start = time.perf_counter_ns()
+        result = call(i)
+        elapsed = time.perf_counter_ns() - start
+        if result != i:
+            raise AssertionError(f"unexpected tool result at {i}: {result!r}")
+        samples.append(elapsed)
+    elapsed_all = time.perf_counter() - start_all
+    return summarize(samples, elapsed_all)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--calls", type=int, default=10_000)
+    parser.add_argument("--warmup", type=int, default=500)
+    args = parser.parse_args()
+    if args.calls < 100 or args.warmup < 0:
+        parser.error("--calls must be >=100 and --warmup must be >=0")
+
+    engine = build_agentcontainment_engine("gateway-benchmark")
+    admission = admit(
+        Policy("benchmark", capabilities=("noop_tool",)),
+        agent_id="gateway-benchmark",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+    )
+    gateway = ActionGateway(PolicyEngine(), engine.controller, history_limit=256)
+    protected = wrap_langchain_tool(noop_tool, admission, gateway)
+    middleware = WarrantKitMiddleware(admission, gateway)
+
+    # Warm both code paths before collecting samples.
+    for i in range(args.warmup):
+        noop_tool.invoke({"value": i})
+        protected.invoke({"value": i})
+        middleware.wrap_tool_call(
+            SimpleNamespace(tool=noop_tool, value=i),
+            lambda request: noop_tool.invoke({"value": request.value}),
+        )
+
+    direct = measure(lambda i: noop_tool.invoke({"value": i}), args.calls)
+    guarded = measure(lambda i: protected.invoke({"value": i}), args.calls)
+    # Measures the native middleware hook around the same LangChain tool
+    # invocation, excluding the outer agent orchestration overhead.
+    middleware_result = measure(
+        lambda i: middleware.wrap_tool_call(
+            SimpleNamespace(tool=noop_tool, value=i),
+            lambda request: noop_tool.invoke({"value": request.value}),
+        ),
+        args.calls,
+    )
+    overhead_us = guarded["latency_us_p50"] - direct["latency_us_p50"]
+    result = {
+        "benchmark": "WarrantKit LangChain wrapper + AgentContainment ActionGateway",
+        "captured_at_utc": datetime.now(timezone.utc).isoformat(),
+        "python": platform.python_version(),
+        "platform": platform.platform(),
+        "calls_per_path": args.calls,
+        "warmup_per_path": args.warmup,
+        "tool": "in-process no-op; no LLM/network/I/O",
+        "direct_langchain_tool": direct,
+        "warrantkit_protected_tool_wrapper": guarded,
+        "warrantkit_native_middleware_hook_noop_handler": middleware_result,
+        "overhead": {
+            "p50_additional_us": round(overhead_us, 2),
+            "throughput_ratio_protected_over_direct": round(guarded["throughput_calls_s"] / direct["throughput_calls_s"], 3),
+        },
+        "gateway_history_entries_after_measurement": len(gateway.history),
+        "gateway_history_limit": gateway.history.maxlen,
+        "limitations": [
+            "single-process serial microbenchmark; no concurrent callers",
+            "in-process no-op tool isolates control-path cost and is not representative of slow real tools",
+            "middleware-hook measurement excludes LangChain agent orchestration and is not an end-to-end agent throughput result",
+            "results vary with CPU, Python, dependency versions, and host load",
+        ],
+    }
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
