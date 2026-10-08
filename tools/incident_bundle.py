@@ -10,6 +10,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
@@ -49,6 +50,7 @@ def write_incident_bundle(
     """Write a signed incident bundle and return its manifest."""
     try:
         from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
         from agentcontain.attestation import Ed25519Signer
     except ImportError as exc:
         raise RuntimeError(
@@ -67,7 +69,26 @@ def write_incident_bundle(
     for name, value in records.items():
         _write_json(output_dir / name, value)
 
-    signer = Ed25519Signer.generate(f"{incident_id}:demo-key")
+    signing_key_file = os.environ.get("WARRANTKIT_INCIDENT_SIGNING_KEY_FILE")
+    key_id = os.environ.get("WARRANTKIT_INCIDENT_SIGNING_KEY_ID", "incident-signing-key")
+    if signing_key_file:
+        private_key = serialization.load_pem_private_key(
+            Path(signing_key_file).read_bytes(),
+            password=None,
+        )
+        if not isinstance(private_key, Ed25519PrivateKey):
+            raise ValueError("incident signing key file must contain an Ed25519 private key")
+        signer = Ed25519Signer(key_id, private_key)
+        trust_note = "Signing key supplied by the deployment operator."
+        key_source = "deployment-key"
+    else:
+        signer = Ed25519Signer.generate(f"{incident_id}:demo-key")
+        trust_note = (
+            "Demo key generated for this bundle. An external verifier must "
+            "supply an independently trusted deployment key for authenticity."
+        )
+        key_source = "ephemeral-demo-key"
+
     public_key = signer.public_key().public_bytes(
         serialization.Encoding.Raw,
         serialization.PublicFormat.Raw,
@@ -78,10 +99,8 @@ def write_incident_bundle(
         "key_id": signer.key_id,
         "encoding": "base64",
         "public_key": base64.b64encode(public_key).decode("ascii"),
-        "trust_note": (
-            "Demo key generated for this bundle. An external verifier must "
-            "supply an independently trusted deployment key for authenticity."
-        ),
+        "key_source": key_source,
+        "trust_note": trust_note,
     }
     _write_json(output_dir / "public-key.json", public_key_record)
 
