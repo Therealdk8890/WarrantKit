@@ -1,5 +1,5 @@
-from pathlib import Path
 import base64
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
