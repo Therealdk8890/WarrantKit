@@ -377,14 +377,23 @@ Verify the bundle independently:
 python tools/verify_incident_bundle.py ./incident-bundle
 ```
 
-For a real deployment, pass the public key obtained from an independent trust anchor:
+For a real deployment, the proof can sign with a deployment-owned Ed25519 PEM key:
+
+```bash
+WARRANTKIT_INCIDENT_SIGNING_KEY_FILE=/secure/incident-signing-key.pem \
+WARRANTKIT_INCIDENT_SIGNING_KEY_ID=prod-incident-signing \
+WARRANTKIT_INCIDENT_BUNDLE_DIR=./incident-bundle \
+sudo -E "$(command -v python)" tools/run_real_kill_demo.py
+```
+
+An auditor can then verify with the public key obtained independently from that deployment trust anchor:
 
 ```bash
 python tools/verify_incident_bundle.py ./incident-bundle \
   --trusted-public-key "<base64-ed25519-public-key>"
 ```
 
-The embedded demo key proves bundle integrity but is **not** itself an organizational trust anchor. The bundle also does not claim that verified evidence makes an agent claim true, or that the tested Linux boundary provides universal host isolation.
+The default demo key proves bundle integrity but is **not** itself an organizational trust anchor. The bundle also does not claim that verified evidence makes an agent claim true, or that the tested Linux boundary provides universal host isolation.
 
 ## Evidence and verification
 
