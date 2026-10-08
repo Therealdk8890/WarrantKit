@@ -19,6 +19,8 @@ from agentcontain.evidence import EvidenceEnvelope, canonical_json
 from agentcontain.policy import Policy
 from agentcontain.warrant import Warrant, verify_warrant
 
+from incident_bundle import write_incident_bundle
+
 
 def _record_binding(record: dict) -> dict:
     return {
@@ -27,6 +29,10 @@ def _record_binding(record: dict) -> dict:
         ).hexdigest(),
         "record": record,
     }
+
+
+def _sha256_file(path: Path) -> str:
+    return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def main() -> int:
@@ -197,7 +203,60 @@ def main() -> int:
             return 1
         print(f"    {result.stdout.strip()}")
 
-        print("[8/8] proof complete")
+        bundle_dir = os.environ.get("WARRANTKIT_INCIDENT_BUNDLE_DIR")
+        if bundle_dir:
+            print("[8/9] building signed incident bundle")
+            incident_id = f"INC-{admission.identity.execution_id}"
+            manifest = write_incident_bundle(
+                Path(bundle_dir),
+                incident_id=incident_id,
+                authority=pre_containment_warrant,
+                containment={
+                    "schema_version": "warrantkit.containment-event/v1",
+                    "incident_id": incident_id,
+                    "runtime_id": runtime_id,
+                    "execution_id": admission.identity.execution_id,
+                    "agent_id": admission.identity.agent_id,
+                    "epoch_before": replayed_warrant.runtime.epoch,
+                    "epoch_after": admission.identity.epoch,
+                    "state_after": "CONTAINED",
+                    "operation": "external_containment",
+                    "reason": "real-kill-proof containment",
+                    "evidence_ref": getattr(report, "evidence_ref", None),
+                    "verification_id": getattr(report, "verification_id", None),
+                    "external_verified": report.external_verified,
+                    "enforcement": enforcement,
+                },
+                runtime_evidence=envelope.to_dict(),
+                external_proof={
+                    "schema_version": "warrantkit.external-proof/v1",
+                    "runtime_id": runtime_id,
+                    "agent_id": admission.identity.agent_id,
+                    "epoch": admission.identity.epoch,
+                    "runtime_state": "TERMINATED",
+                    "can_execute": False,
+                    "cgroup_populated": False,
+                    "workload_exit_code": child.returncode,
+                    "terminal_state_independently_observed": True,
+                },
+                provenance={
+                    "schema_version": "warrantkit.incident-provenance/v1",
+                    "producer": "tools/run_real_kill_demo.py",
+                    "execution_id": admission.identity.execution_id,
+                    "source_runtime_evidence": str(artifact),
+                    "runtime_evidence_sha256": _sha256_file(artifact),
+                    "runtime_verifier": str(verifier),
+                    "runtime_verifier_result": result.stdout.strip(),
+                },
+            )
+            print(f"    bundle={bundle_dir}")
+            print(f"    incident={manifest['incident_id']}")
+            print("    signature=Ed25519 verification receipt")
+        else:
+            print("[8/9] incident bundle not requested")
+            print("    set WARRANTKIT_INCIDENT_BUNDLE_DIR to export one")
+
+        print("[9/9] proof complete")
         print("What this proves: the tested Linux environment enforced the configured")
         print("cgroup-v2 kill/fence boundary, invalidated pre-containment authority,")
         print("and produced independently checked evidence.")
