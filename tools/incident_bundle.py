@@ -135,7 +135,7 @@ def verify_incident_bundle(
     public key.
     """
     try:
-        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
         from agentcontain.attestation import AttestationEnvelope, Ed25519Verifier
     except ImportError as exc:
         raise RuntimeError(
@@ -162,9 +162,7 @@ def verify_incident_bundle(
     if supplied != embedded:
         raise ValueError("trusted public key does not match bundle key")
 
-    public_key = serialization.load_raw_public_key(
-        supplied
-    )
+    public_key = Ed25519PublicKey.from_public_bytes(supplied)
     payload = Ed25519Verifier({receipt["key_id"]: public_key}).verify(
         AttestationEnvelope.from_dict(receipt),
         expected_artifact_type="receipt",
