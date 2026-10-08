@@ -118,12 +118,12 @@ agent = create_agent(model, tools=[protected_refund])
 
 The wrapper verifies the current Warrant, requires the corresponding capability, and executes the underlying tool through AgentContainment's controller-owned ActionGateway. If containment advances the runtime epoch, the retained Warrant is rejected before the underlying tool is invoked.
 
-The first integration deliberately uses LangChain's synchronous tool invocation path so the runtime lease and actual tool side effect remain inside the same controller-owned execution boundary. Async-native tool execution is not claimed by this integration yet.
+The first integration deliberately uses LangChain's synchronous tool invocation path so the runtime lease and actual tool side effect remain inside the same controller-owned execution boundary. It creates a wrapper tool and invokes the underlying tool through LangChain again, so it has extra framework overhead. Async-native tool execution is not claimed by this integration yet.
 
 
 ### Native middleware path
 
-For LangChain 1.x applications, WarrantKit also provides a native `wrap_tool_call` middleware integration. This protects the framework's existing tool objects instead of replacing them with wrapper tools.
+For LangChain 1.x applications, WarrantKit also provides a native `wrap_tool_call` middleware integration. This protects the framework's existing tool objects instead of replacing them with wrapper tools. **Prefer this path for high-frequency tool calls:** it avoids the extra nested `StructuredTool.invoke()` used by the wrapper integration.
 
 ```bash
 python -m pip install "warrantkit[langchain]"
@@ -156,7 +156,7 @@ middleware = warrantkit_middleware(
 
 Authority is checked before the LangChain tool handler is allowed to run. AgentContainment's ActionGateway remains the final enforcement point. If containment advances the runtime epoch, retained authority is rejected before the handler and its side effect are reached.
 
-This path is synchronous in v1; async-native middleware execution is not claimed yet.
+This path is synchronous in v1; async-native middleware execution is not claimed yet. In a local Python 3.11/Linux microbenchmark using an in-process no-op tool (50,000 measured calls per path), the native middleware hook measured about 230 µs median per call versus 201 µs for direct LangChain invocation, while the wrapper measured about 441 µs. Treat these as directional microbenchmark results, not production capacity claims; real tool latency, host load, and concurrent agents change the result. The reproducible script is `tools/benchmark_gateway_overhead.py`.
 
 For Ed25519 Warrant and receipt attestation, install the optional cryptographic dependency explicitly:
 
