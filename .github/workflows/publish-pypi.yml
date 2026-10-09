@@ -40,7 +40,7 @@ jobs:
         id: check
         run: |
           python - <<'PY'
-          import json
+          import os
           import tomllib
           import urllib.error
           import urllib.request
@@ -61,8 +61,8 @@ jobs:
                   raise
 
           print(f"{name} {version}: {'already published' if published else 'not published'}")
-          with open(__import__("os").environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"published={'true' if published else 'false'}\\n")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"published={'true' if published else 'false'}\n")
           PY
 
       - name: Publish to PyPI
