@@ -164,6 +164,13 @@ def main() -> int:
         concurrent_gateway = ActionGateway(PolicyEngine(), concurrent_engine.controller)
         concurrent_protected = wrap_langchain_tool(noop_tool, concurrent_admission, concurrent_gateway)
         concurrent_middleware = WarrantKitMiddleware(concurrent_admission, concurrent_gateway)
+        expected_decisions = 2 * args.calls
+        actual_decisions = len(concurrent_gateway.history)
+        if actual_decisions != expected_decisions:
+            raise AssertionError(
+                f"expected {expected_decisions} gateway decisions at concurrency {workers}, "
+                f"recorded {actual_decisions}"
+            )
         concurrent_results[str(workers)] = {
             "direct_langchain_tool": measure_concurrent(
                 lambda i: noop_tool.invoke({"value": i}), args.calls, workers
@@ -177,7 +184,7 @@ def main() -> int:
                     lambda request: noop_tool.invoke({"value": request.value}),
                 ), args.calls, workers
             ),
-            "gateway_decisions_recorded": len(concurrent_gateway.history),
+            "gateway_decisions_recorded": actual_decisions,
         }
     result["concurrent_threaded_runs"] = concurrent_results
     print(json.dumps(result, indent=2))
