@@ -164,19 +164,29 @@ def main() -> int:
         concurrent_gateway = ActionGateway(PolicyEngine(), concurrent_engine.controller)
         concurrent_protected = wrap_langchain_tool(noop_tool, concurrent_admission, concurrent_gateway)
         concurrent_middleware = WarrantKitMiddleware(concurrent_admission, concurrent_gateway)
+        direct_concurrent = measure_concurrent(
+            lambda i: noop_tool.invoke({"value": i}), args.calls, workers
+        )
+        protected_concurrent = measure_concurrent(
+            lambda i: concurrent_protected.invoke({"value": i}), args.calls, workers
+        )
+        middleware_concurrent = measure_concurrent(
+            lambda i: concurrent_middleware.wrap_tool_call(
+                SimpleNamespace(tool=noop_tool, value=i),
+                lambda request: noop_tool.invoke({"value": request.value}),
+            ), args.calls, workers
+        )
+        expected_decisions = 2 * args.calls
+        actual_decisions = len(concurrent_gateway.history)
+        if actual_decisions != expected_decisions:
+            raise AssertionError(
+                f"expected {expected_decisions} gateway decisions at concurrency {workers}, "
+                f"recorded {actual_decisions}"
+            )
         concurrent_results[str(workers)] = {
-            "direct_langchain_tool": measure_concurrent(
-                lambda i: noop_tool.invoke({"value": i}), args.calls, workers
-            ),
-            "warrantkit_protected_tool_wrapper": measure_concurrent(
-                lambda i: concurrent_protected.invoke({"value": i}), args.calls, workers
-            ),
-            "warrantkit_native_middleware_hook": measure_concurrent(
-                lambda i: concurrent_middleware.wrap_tool_call(
-                    SimpleNamespace(tool=noop_tool, value=i),
-                    lambda request: noop_tool.invoke({"value": request.value}),
-                ), args.calls, workers
-            ),
+            "direct_langchain_tool": direct_concurrent,
+            "warrantkit_protected_tool_wrapper": protected_concurrent,
+            "warrantkit_native_middleware_hook": middleware_concurrent,
             "gateway_decisions_recorded": actual_decisions,
         }
     result["concurrent_threaded_runs"] = concurrent_results
