@@ -23,9 +23,6 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install AgentContainment
-        run: python -m pip install ./AgentContainment
-
       - name: Install WarrantKit without test extras
         run: python -m pip install .
 

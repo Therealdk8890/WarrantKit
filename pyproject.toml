@@ -12,6 +12,7 @@ license = { text = "Apache-2.0" }
 authors = [{ name = "Daniel Kissel" }]
 keywords = ["ai-agents", "agent-security", "agent-containment", "ai-safety", "runtime-security", "policy-enforcement", "cgroups", "ebpf"]
 classifiers = ["Development Status :: 3 - Alpha", "Intended Audience :: Developers", "License :: OSI Approved :: Apache Software License", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only"]
+dependencies = ["agentcontainment>=0.1.1,<0.2"]
 urls = { Repository = "https://github.com/Therealdk8890/WarrantKit", Issues = "https://github.com/Therealdk8890/WarrantKit/issues" }
 
 [project.scripts]
