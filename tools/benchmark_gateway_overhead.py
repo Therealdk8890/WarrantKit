@@ -64,17 +64,16 @@ def measure_concurrent(
     call, count: int, workers: int, warmup: int = 0
 ) -> dict[str, float | int]:
     """Measure simultaneous worker loops, with warmup outside timed samples."""
-    for i in range(warmup):
-        value = -i - 1
-        result = call(value)
-        if result != value:
-            raise AssertionError(f"unexpected warmup result at {value}: {result!r}")
-
     counts = [count // workers + (1 if i < count % workers else 0) for i in range(workers)]
     start_barrier = Barrier(workers + 1)
 
     def run_worker(worker_id: int, worker_calls: int) -> list[int]:
         samples: list[int] = []
+        for i in range(warmup):
+            value = -(worker_id * warmup + i + 1)
+            result = call(value)
+            if result != value:
+                raise AssertionError(f"unexpected warmup result at {value}: {result!r}")
         start_barrier.wait()
         base = worker_id * count
         for offset in range(worker_calls):
