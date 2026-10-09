@@ -14,6 +14,7 @@ import platform
 import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 from datetime import datetime, timezone
 
@@ -59,22 +60,47 @@ def measure(call, count: int) -> dict[str, float | int]:
     return summarize(samples, elapsed_all)
 
 
-def measure_concurrent(call, count: int, workers: int) -> dict[str, float | int]:
-    """Measure per-call latency and aggregate throughput with shared gateway state."""
-    def timed(i: int) -> int:
-        started = time.perf_counter_ns()
-        result = call(i)
-        elapsed = time.perf_counter_ns() - started
-        if result != i:
-            raise AssertionError(f"unexpected tool result at {i}: {result!r}")
-        return elapsed
+def measure_concurrent(
+    call, count: int, workers: int, warmup: int = 0
+) -> dict[str, float | int]:
+    """Measure simultaneous worker loops, with warmup outside timed samples."""
+    for i in range(warmup):
+        value = -i - 1
+        result = call(value)
+        if result != value:
+            raise AssertionError(f"unexpected warmup result at {value}: {result!r}")
 
-    start_all = time.perf_counter()
+    counts = [count // workers + (1 if i < count % workers else 0) for i in range(workers)]
+    start_barrier = Barrier(workers + 1)
+
+    def run_worker(worker_id: int, worker_calls: int) -> list[int]:
+        samples: list[int] = []
+        start_barrier.wait()
+        base = worker_id * count
+        for offset in range(worker_calls):
+            value = base + offset
+            started = time.perf_counter_ns()
+            result = call(value)
+            elapsed = time.perf_counter_ns() - started
+            if result != value:
+                raise AssertionError(f"unexpected tool result at {value}: {result!r}")
+            samples.append(elapsed)
+        return samples
+
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        samples = list(pool.map(timed, range(count)))
-    elapsed_all = time.perf_counter() - start_all
+        futures = [
+            pool.submit(run_worker, worker_id, worker_count)
+            for worker_id, worker_count in enumerate(counts)
+        ]
+        start_all = time.perf_counter()
+        start_barrier.wait()
+        worker_samples = [future.result() for future in futures]
+        elapsed_all = time.perf_counter() - start_all
+
+    samples = [sample for worker_samples_for_thread in worker_samples for sample in worker_samples_for_thread]
     result = summarize(samples, elapsed_all)
     result["workers"] = workers
+    result["warmup_per_worker"] = warmup
     return result
 
 
@@ -161,33 +187,50 @@ def main() -> int:
             engine=concurrent_engine,
             runtime_id=concurrent_engine.runtime_id,
         )
-        concurrent_gateway = ActionGateway(PolicyEngine(), concurrent_engine.controller)
-        concurrent_protected = wrap_langchain_tool(noop_tool, concurrent_admission, concurrent_gateway)
-        concurrent_middleware = WarrantKitMiddleware(concurrent_admission, concurrent_gateway)
+        wrapper_gateway = ActionGateway(PolicyEngine(), concurrent_engine.controller)
+        concurrent_protected = wrap_langchain_tool(noop_tool, concurrent_admission, wrapper_gateway)
+
+        middleware_engine = build_agentcontainment_engine(f"gateway-middleware-benchmark-{workers}")
+        middleware_admission = admit(
+            Policy("benchmark", capabilities=("noop_tool",)),
+            agent_id=f"gateway-middleware-benchmark-{workers}",
+            engine=middleware_engine,
+            runtime_id=middleware_engine.runtime_id,
+        )
+        middleware_gateway = ActionGateway(PolicyEngine(), middleware_engine.controller)
+        concurrent_middleware = WarrantKitMiddleware(middleware_admission, middleware_gateway)
+
         direct_concurrent = measure_concurrent(
-            lambda i: noop_tool.invoke({"value": i}), args.calls, workers
+            lambda i: noop_tool.invoke({"value": i}), args.calls, workers, args.warmup
         )
         protected_concurrent = measure_concurrent(
-            lambda i: concurrent_protected.invoke({"value": i}), args.calls, workers
+            lambda i: concurrent_protected.invoke({"value": i}), args.calls, workers, args.warmup
         )
         middleware_concurrent = measure_concurrent(
             lambda i: concurrent_middleware.wrap_tool_call(
                 SimpleNamespace(tool=noop_tool, value=i),
                 lambda request: noop_tool.invoke({"value": request.value}),
-            ), args.calls, workers
+            ), args.calls, workers, args.warmup
         )
-        expected_decisions = 2 * args.calls
-        actual_decisions = len(concurrent_gateway.history)
-        if actual_decisions != expected_decisions:
+        expected_decisions = args.calls + args.warmup * workers
+        wrapper_decisions = len(wrapper_gateway.history)
+        middleware_decisions = len(middleware_gateway.history)
+        if wrapper_decisions != expected_decisions:
             raise AssertionError(
-                f"expected {expected_decisions} gateway decisions at concurrency {workers}, "
-                f"recorded {actual_decisions}"
+                f"expected {expected_decisions} wrapper gateway decisions at concurrency {workers}, "
+                f"recorded {wrapper_decisions}"
+            )
+        if middleware_decisions != expected_decisions:
+            raise AssertionError(
+                f"expected {expected_decisions} middleware gateway decisions at concurrency {workers}, "
+                f"recorded {middleware_decisions}"
             )
         concurrent_results[str(workers)] = {
             "direct_langchain_tool": direct_concurrent,
             "warrantkit_protected_tool_wrapper": protected_concurrent,
             "warrantkit_native_middleware_hook": middleware_concurrent,
-            "gateway_decisions_recorded": actual_decisions,
+            "wrapper_gateway_decisions_recorded": wrapper_decisions,
+            "middleware_gateway_decisions_recorded": middleware_decisions,
         }
     result["concurrent_threaded_runs"] = concurrent_results
     print(json.dumps(result, indent=2))
