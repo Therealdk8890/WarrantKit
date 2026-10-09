@@ -75,7 +75,7 @@ def measure_concurrent(
         samples: list[int] = []
         for i in range(worker_warmup):
             value = -(sum(warmup_counts[:worker_id]) + i + 1)
-            result = call(value)
+            result = call(worker_id, value)
             if result != value:
                 raise AssertionError(f"unexpected warmup result at {value}: {result!r}")
         start_barrier.wait()
@@ -83,7 +83,7 @@ def measure_concurrent(
         for offset in range(worker_calls):
             value = base + offset
             started = time.perf_counter_ns()
-            result = call(value)
+            result = call(worker_id, value)
             elapsed = time.perf_counter_ns() - started
             if result != value:
                 raise AssertionError(f"unexpected tool result at {value}: {result!r}")
@@ -205,13 +205,13 @@ def main() -> int:
         concurrent_middleware = WarrantKitMiddleware(middleware_admission, middleware_gateway)
 
         direct_concurrent = measure_concurrent(
-            lambda i: noop_tool.invoke({"value": i}), args.calls, workers, args.warmup
+            lambda _worker_id, i: noop_tool.invoke({"value": i}), args.calls, workers, args.warmup
         )
         protected_concurrent = measure_concurrent(
-            lambda i: concurrent_protected.invoke({"value": i}), args.calls, workers, args.warmup
+            lambda _worker_id, i: concurrent_protected.invoke({"value": i}), args.calls, workers, args.warmup
         )
         middleware_concurrent = measure_concurrent(
-            lambda i: concurrent_middleware.wrap_tool_call(
+            lambda _worker_id, i: concurrent_middleware.wrap_tool_call(
                 SimpleNamespace(tool=noop_tool, value=i),
                 lambda request: noop_tool.invoke({"value": request.value}),
             ), args.calls, workers, args.warmup
@@ -229,12 +229,94 @@ def main() -> int:
                 f"expected {expected_decisions} middleware gateway decisions at concurrency {workers}, "
                 f"recorded {middleware_decisions}"
             )
+        # Separate runtimes model concurrent agents rather than concurrent calls
+        # contending on one runtime's execution fence.
+        isolated_wrapper_engines = [
+            build_agentcontainment_engine(f"gateway-isolated-wrapper-{workers}-{worker_id}")
+            for worker_id in range(workers)
+        ]
+        isolated_wrapper_admissions = [
+            admit(
+                Policy("benchmark", capabilities=("noop_tool",)),
+                agent_id=f"gateway-isolated-wrapper-{workers}-{worker_id}",
+                engine=worker_engine,
+                runtime_id=worker_engine.runtime_id,
+            )
+            for worker_id, worker_engine in enumerate(isolated_wrapper_engines)
+        ]
+        isolated_wrapper_gateways = [
+            ActionGateway(PolicyEngine(), worker_engine.controller)
+            for worker_engine in isolated_wrapper_engines
+        ]
+        isolated_protected_tools = [
+            wrap_langchain_tool(noop_tool, worker_admission, worker_gateway)
+            for worker_admission, worker_gateway in zip(
+                isolated_wrapper_admissions, isolated_wrapper_gateways
+            )
+        ]
+
+        isolated_middleware_engines = [
+            build_agentcontainment_engine(f"gateway-isolated-middleware-{workers}-{worker_id}")
+            for worker_id in range(workers)
+        ]
+        isolated_middleware_admissions = [
+            admit(
+                Policy("benchmark", capabilities=("noop_tool",)),
+                agent_id=f"gateway-isolated-middleware-{workers}-{worker_id}",
+                engine=worker_engine,
+                runtime_id=worker_engine.runtime_id,
+            )
+            for worker_id, worker_engine in enumerate(isolated_middleware_engines)
+        ]
+        isolated_middleware_gateways = [
+            ActionGateway(PolicyEngine(), worker_engine.controller)
+            for worker_engine in isolated_middleware_engines
+        ]
+        isolated_middlewares = [
+            WarrantKitMiddleware(worker_admission, worker_gateway)
+            for worker_admission, worker_gateway in zip(
+                isolated_middleware_admissions, isolated_middleware_gateways
+            )
+        ]
+
+        isolated_wrapper_result = measure_concurrent(
+            lambda worker_id, i: isolated_protected_tools[worker_id].invoke({"value": i}),
+            args.calls,
+            workers,
+            args.warmup,
+        )
+        isolated_middleware_result = measure_concurrent(
+            lambda worker_id, i: isolated_middlewares[worker_id].wrap_tool_call(
+                SimpleNamespace(tool=noop_tool, value=i),
+                lambda request: noop_tool.invoke({"value": request.value}),
+            ),
+            args.calls,
+            workers,
+            args.warmup,
+        )
+        isolated_wrapper_decisions = sum(len(gateway.history) for gateway in isolated_wrapper_gateways)
+        isolated_middleware_decisions = sum(len(gateway.history) for gateway in isolated_middleware_gateways)
+        if isolated_wrapper_decisions != expected_decisions:
+            raise AssertionError(
+                f"expected {expected_decisions} isolated wrapper gateway decisions at concurrency {workers}, "
+                f"recorded {isolated_wrapper_decisions}"
+            )
+        if isolated_middleware_decisions != expected_decisions:
+            raise AssertionError(
+                f"expected {expected_decisions} isolated middleware gateway decisions at concurrency {workers}, "
+                f"recorded {isolated_middleware_decisions}"
+            )
+
         concurrent_results[str(workers)] = {
             "direct_langchain_tool": direct_concurrent,
-            "warrantkit_protected_tool_wrapper": protected_concurrent,
-            "warrantkit_native_middleware_hook": middleware_concurrent,
-            "wrapper_gateway_decisions_recorded": wrapper_decisions,
-            "middleware_gateway_decisions_recorded": middleware_decisions,
+            "warrantkit_protected_tool_wrapper_shared_runtime": protected_concurrent,
+            "warrantkit_native_middleware_shared_runtime": middleware_concurrent,
+            "warrantkit_protected_tool_wrapper_isolated_runtime_per_worker": isolated_wrapper_result,
+            "warrantkit_native_middleware_isolated_runtime_per_worker": isolated_middleware_result,
+            "shared_wrapper_gateway_decisions_recorded": wrapper_decisions,
+            "shared_middleware_gateway_decisions_recorded": middleware_decisions,
+            "isolated_wrapper_gateway_decisions_recorded": isolated_wrapper_decisions,
+            "isolated_middleware_gateway_decisions_recorded": isolated_middleware_decisions,
         }
     result["concurrent_threaded_runs"] = concurrent_results
     print(json.dumps(result, indent=2))
