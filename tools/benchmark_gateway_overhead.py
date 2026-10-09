@@ -65,12 +65,16 @@ def measure_concurrent(
 ) -> dict[str, float | int]:
     """Measure simultaneous worker loops, with warmup outside timed samples."""
     counts = [count // workers + (1 if i < count % workers else 0) for i in range(workers)]
+    warmup_counts = [
+        warmup // workers + (1 if i < warmup % workers else 0)
+        for i in range(workers)
+    ]
     start_barrier = Barrier(workers + 1)
 
-    def run_worker(worker_id: int, worker_calls: int) -> list[int]:
+    def run_worker(worker_id: int, worker_calls: int, worker_warmup: int) -> list[int]:
         samples: list[int] = []
-        for i in range(warmup):
-            value = -(worker_id * warmup + i + 1)
+        for i in range(worker_warmup):
+            value = -(sum(warmup_counts[:worker_id]) + i + 1)
             result = call(value)
             if result != value:
                 raise AssertionError(f"unexpected warmup result at {value}: {result!r}")
@@ -88,7 +92,7 @@ def measure_concurrent(
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         futures = [
-            pool.submit(run_worker, worker_id, worker_count)
+            pool.submit(run_worker, worker_id, worker_count, warmup_counts[worker_id])
             for worker_id, worker_count in enumerate(counts)
         ]
         start_all = time.perf_counter()
@@ -99,7 +103,8 @@ def measure_concurrent(
     samples = [sample for worker_samples_for_thread in worker_samples for sample in worker_samples_for_thread]
     result = summarize(samples, elapsed_all)
     result["workers"] = workers
-    result["warmup_per_worker"] = warmup
+    result["warmup_total"] = warmup
+    result["warmup_calls_by_worker"] = warmup_counts
     return result
 
 
@@ -211,7 +216,7 @@ def main() -> int:
                 lambda request: noop_tool.invoke({"value": request.value}),
             ), args.calls, workers, args.warmup
         )
-        expected_decisions = args.calls + args.warmup * workers
+        expected_decisions = args.calls + args.warmup
         wrapper_decisions = len(wrapper_gateway.history)
         middleware_decisions = len(middleware_gateway.history)
         if wrapper_decisions != expected_decisions:
