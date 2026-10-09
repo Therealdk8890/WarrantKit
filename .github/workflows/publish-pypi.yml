@@ -36,39 +36,7 @@ jobs:
           python -m pip install twine
           python -m twine check dist/*
 
-      - name: Check whether this version is already on PyPI
-        id: check
-        run: |
-          python - <<'PY'
-          import os
-          import tomllib
-          import urllib.error
-          import urllib.request
-          from pathlib import Path
-
-          project = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]
-          name = project["name"]
-          version = project["version"]
-          url = f"https://pypi.org/pypi/{name}/{version}/json"
-
-          try:
-              with urllib.request.urlopen(url, timeout=10) as response:
-                  published = response.status == 200
-          except urllib.error.HTTPError as exc:
-              if exc.code == 404:
-                  published = False
-              else:
-                  raise
-
-          print(f"{name} {version}: {'already published' if published else 'not published'}")
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"published={'true' if published else 'false'}\n")
-          PY
-
       - name: Publish to PyPI
-        if: steps.check.outputs.published != 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
-
-      - name: Skip already-published version
-        if: steps.check.outputs.published == 'true'
-        run: echo "This WarrantKit version is already on PyPI; nothing to upload."
+        with:
+          skip-existing: true
