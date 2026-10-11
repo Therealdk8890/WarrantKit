@@ -18,7 +18,6 @@ def test_langchain_tool_runs_only_with_matching_warrant_capability() -> None:
 
     engine = build_agentcontainment_engine("agent-langchain")
     signer = Ed25519Signer.generate("langchain-test")
-    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("payments", capabilities=("payments_refund",)),
         agent_id="agent-langchain",
@@ -168,6 +167,6 @@ def test_langchain_wrapper_rejects_replaced_admission_warrant() -> None:
         ),
     )
 
-    with pytest.raises(LangChainWarrantError, match="exceed the accepted policy"):
+    with pytest.raises(LangChainWarrantError, match="signed Warrant payload does not match"):
         wrapped.invoke({"value": "must-not-run"})
     assert calls == []
