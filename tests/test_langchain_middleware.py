@@ -79,7 +79,7 @@ def test_native_middleware_rejects_after_containment_before_handler() -> None:
 
     contain(admission)
 
-    with pytest.raises(LangChainWarrantError, match="Warrant verification failed"):
+    with pytest.raises(LangChainWarrantError, match="signed Warrant attestation"):
         middleware.wrap_tool_call(_Request("payments_refund"), handler)
 
     assert calls == []
