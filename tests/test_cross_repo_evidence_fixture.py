@@ -43,6 +43,7 @@ def test_cross_repo_fixture_interoperability() -> None:
                 "execution_id": "exec-cross-repo-1",
                 "sequence": 1,
                 "name": "containment_verified",
+                "epoch": 1,
             },
         ),
         enforcement={"complete": True},
