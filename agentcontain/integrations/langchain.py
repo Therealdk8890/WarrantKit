@@ -29,10 +29,20 @@ def _current_runtime(admission: Admission, gateway):
     return runtime
 
 
-def _verify_current_authority(admission: Admission, gateway) -> None:
+def _verify_current_authority(admission: Admission, gateway, warrant_verifier) -> None:
     warrant = admission.warrant
     if warrant is None:
         raise LangChainWarrantError("execution has no Warrant authority")
+    if warrant_verifier is None:
+        raise LangChainWarrantError("a trusted Ed25519 Warrant verifier is required")
+    if admission.warrant_attestation is None:
+        raise LangChainWarrantError("execution has no signed Warrant attestation; issue with warrant_signer")
+    try:
+        signed_warrant = warrant_verifier.verify_warrant(admission.warrant_attestation)
+    except (TypeError, ValueError) as exc:
+        raise LangChainWarrantError(f"Warrant signature verification failed: {exc}") from exc
+    if signed_warrant != warrant:
+        raise LangChainWarrantError("signed Warrant payload does not match the active Warrant")
     runtime = _current_runtime(admission, gateway)
     snapshot = runtime.snapshot()
     try:
@@ -62,6 +72,7 @@ def wrap_langchain_tool(
     admission: Admission,
     gateway=None,
     *,
+    warrant_verifier,
     capability: str | None = None,
     risk: int = 0,
     resource: str = "langchain-tool",
@@ -97,7 +108,7 @@ def wrap_langchain_tool(
     required_capability = capability or operation
 
     def invoke_authorized(**kwargs: Any) -> Any:
-        _verify_current_authority(admission, gateway)
+        _verify_current_authority(admission, gateway, warrant_verifier)
         warrant = admission.warrant
         assert warrant is not None
         if required_capability not in warrant.authority.capabilities:
