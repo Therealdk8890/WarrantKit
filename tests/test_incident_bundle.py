@@ -19,6 +19,8 @@ def _valid_records() -> dict:
             "execution_id": execution_id,
             "runtime_id": runtime_id,
             "agent_id": agent_id,
+            "policy_id": "policy-1",
+            "policy_digest": "sha256:policy-digest-1",
             "epoch": 1,
         },
         "events": [
@@ -41,7 +43,14 @@ def _valid_records() -> dict:
     evidence_bytes = (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode()
     return {
         "incident_id": "INC-test",
-        "authority": {"warrant_id": "w-1", "runtime": {"epoch": 0}},
+        "authority": {
+            "schema_version": "warrantkit.warrant/v1",
+            "warrant_id": "w-1",
+            "subject": {"agent_id": agent_id, "execution_id": execution_id},
+            "authority": {"policy_id": "policy-1", "policy_digest": "sha256:policy-digest-1"},
+            "runtime": {"runtime_id": runtime_id, "epoch": 0},
+            "lifecycle": {"state": "active", "revoked_at": None},
+        },
         "containment": {
             "schema_version": "warrantkit.containment-event/v1",
             "incident_id": "INC-test",
@@ -57,6 +66,7 @@ def _valid_records() -> dict:
         "runtime_evidence": evidence,
         "external_proof": {
             "schema_version": "warrantkit.external-proof/v1",
+            "execution_id": execution_id,
             "runtime_id": runtime_id,
             "agent_id": agent_id,
             "epoch": 1,
@@ -248,3 +258,48 @@ def test_incident_bundle_rejects_receipt_key_id_mismatch(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="public key key_id does not match receipt"):
         verify_incident_bundle(bundle)
+
+
+def test_incident_bundle_rejects_authority_from_another_execution(tmp_path: Path) -> None:
+    records = _valid_records()
+    records["authority"]["subject"]["execution_id"] = "exec-other"
+    with pytest.raises(ValueError, match="issued authority subject"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
+
+
+def test_incident_bundle_rejects_authority_from_another_policy(tmp_path: Path) -> None:
+    records = _valid_records()
+    records["authority"]["authority"]["policy_digest"] = "sha256:other-policy"
+    with pytest.raises(ValueError, match="issued authority policy"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
+
+
+def test_incident_bundle_requires_external_proof_execution_id(tmp_path: Path) -> None:
+    records = _valid_records()
+    records["external_proof"].pop("execution_id")
+    with pytest.raises(ValueError, match="external proof execution identity"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
