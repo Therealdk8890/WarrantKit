@@ -25,7 +25,7 @@ def _envelope(receipt_id=None, digest="digest") -> EvidenceEnvelope:
             "policy_digest": "policy-digest",
             "epoch": 0,
         },
-        events=({"execution_id": "exec-1", "sequence": 1, "name": "admission_verified"},),
+        events=({"execution_id": "exec-1", "sequence": 1, "name": "admission_verified", "epoch": 0},),
         verification={"status": "verified", "method": "test"},
         receipt=receipt,
     )
