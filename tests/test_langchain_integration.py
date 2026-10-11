@@ -1,3 +1,4 @@
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from dataclasses import replace
 import pytest
 
@@ -16,11 +17,13 @@ def test_langchain_tool_runs_only_with_matching_warrant_capability() -> None:
         return f"refunded:{amount}"
 
     engine = build_agentcontainment_engine("agent-langchain")
+    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("payments", capabilities=("payments_refund",)),
         agent_id="agent-langchain",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
     protected = __import__(
@@ -30,6 +33,7 @@ def test_langchain_tool_runs_only_with_matching_warrant_capability() -> None:
         payments_refund,
         admission,
         gateway,
+        warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}),
     )
 
     assert protected.invoke({"amount": 25}) == "refunded:25"
@@ -48,18 +52,20 @@ def test_langchain_tool_rejects_after_runtime_containment() -> None:
         return "written"
 
     engine = build_agentcontainment_engine("agent-langchain-stale")
+    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("writes", capabilities=("consequential_write",)),
         agent_id="agent-langchain-stale",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
     protected = __import__(
         "agentcontain.integrations.langchain",
         fromlist=["wrap_langchain_tool", "LangChainWarrantError"],
     )
-    wrapped = protected.wrap_langchain_tool(consequential_write, admission, gateway)
+    wrapped = protected.wrap_langchain_tool(consequential_write, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     contain(admission)
 
@@ -82,18 +88,20 @@ def test_langchain_tool_rejects_missing_capability_before_side_effect() -> None:
         return "written"
 
     engine = build_agentcontainment_engine("agent-langchain-capability")
+    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("limited", capabilities=("read_only",)),
         agent_id="agent-langchain-capability",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
     integration = __import__(
         "agentcontain.integrations.langchain",
         fromlist=["wrap_langchain_tool", "LangChainWarrantError"],
     )
-    wrapped = integration.wrap_langchain_tool(production_write, admission, gateway)
+    wrapped = integration.wrap_langchain_tool(production_write, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     with pytest.raises(integration.LangChainWarrantError):
         wrapped.invoke({"value": "must-not-run"})
@@ -105,11 +113,13 @@ def test_recontainment_requires_prior_containment() -> None:
     from agentcontain import Policy, admit, build_agentcontainment_engine
 
     engine = build_agentcontainment_engine("agent-recontain-precondition")
+    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("writes", capabilities=("write",)),
         agent_id="agent-recontain-precondition",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
 
     with pytest.raises(RuntimeError, match="already-contained"):
@@ -134,14 +144,16 @@ def test_langchain_wrapper_rejects_replaced_admission_warrant() -> None:
         return "written"
 
     engine = build_agentcontainment_engine("agent-langchain-replaced-warrant")
+    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("limited", capabilities=("protected_write",)),
         agent_id="agent-langchain-replaced-warrant",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
-    wrapped = wrap_langchain_tool(protected_write, admission, gateway)
+    wrapped = wrap_langchain_tool(protected_write, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     assert admission.warrant is not None
     original = admission.warrant
@@ -155,6 +167,35 @@ def test_langchain_wrapper_rejects_replaced_admission_warrant() -> None:
         ),
     )
 
-    with pytest.raises(LangChainWarrantError, match="exceed the accepted policy"):
+    with pytest.raises(LangChainWarrantError, match="signed Warrant payload does not match"):
+        wrapped.invoke({"value": "must-not-run"})
+    assert calls == []
+
+
+def test_langchain_tool_rejects_unsigned_warrant_before_side_effect() -> None:
+    pytest.importorskip("langchain_core")
+    from langchain_core.tools import tool
+    from agentcontain.integrations.langchain import LangChainWarrantError, wrap_langchain_tool
+
+    calls = []
+
+    @tool
+    def protected_write(value: str) -> str:
+        calls.append(value)
+        return "written"
+
+    engine = build_agentcontainment_engine("agent-langchain-unsigned")
+    admission = admit(
+        Policy("limited", capabilities=("protected_write",)),
+        agent_id="agent-langchain-unsigned",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+    )
+    trusted_signer = Ed25519Signer.generate("trusted-but-not-used")
+    verifier = Ed25519Verifier({trusted_signer.key_id: trusted_signer.public_key()})
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    wrapped = wrap_langchain_tool(protected_write, admission, gateway, warrant_verifier=verifier)
+
+    with pytest.raises(LangChainWarrantError, match="no signed Warrant attestation"):
         wrapped.invoke({"value": "must-not-run"})
     assert calls == []
