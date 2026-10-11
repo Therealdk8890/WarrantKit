@@ -2,133 +2,81 @@
 
 ## Purpose
 
-WarrantKit separates authority from evidence. This document defines what a verified receipt means, what it does not mean, and how the trust boundary changes when asymmetric signatures are used.
+WarrantKit separates authority from evidence. This document defines what a verified receipt means, what it does not mean, and how trust changes when asymmetric signatures are used.
 
 ## Core semantics
 
 - **Warrant** = authority granted for one execution.
 - **Evidence** = an observation or result produced at a declared evidence boundary.
 - **Verification** = the defined procedure successfully checked the supplied evidence and bindings.
-- **Receipt** = an authenticated record that binds evidence to an execution and verification context.
+- **Receipt** = a record that binds evidence to an execution and verification context.
 
-**Verified does not mean the underlying claim is universally true.**
+**Verified does not mean the underlying claim is universally true.** Verification establishes only the documented invariants against the supplied artifact and trust anchors.
 
-A verified receipt means that the verifier established the documented invariants against the supplied artifact and trust anchors.
+## Current profiles
 
-## Current HMAC profile
+### HMAC receipt profile
 
-The current runtime receipt profile uses HMAC authentication with an operator/deployer-supplied shared secret.
+The runtime receipt path supports HMAC authentication using an operator/deployer-supplied shared secret.
 
-This provides:
-- integrity/tamper detection when the secret is protected
-- authentication to holders of the shared secret
+This provides integrity/tamper detection when the secret is protected and authentication to holders of that secret. It does not provide non-repudiation, prove a unique signer created the receipt, or prevent a secret-holder from fabricating receipts.
 
-It does not provide:
-- non-repudiation
-- proof that a unique signer produced the receipt
-- protection against a holder of the shared secret fabricating receipts
+HMAC must not be described as asymmetric attestation.
 
-HMAC remains useful for local compatibility and early deployments, but it is not described as asymmetric attestation.
+### Ed25519 attestation profile — implemented
 
-## Asymmetric profile
+The optional `warrantkit[attestation]` extra provides Ed25519 signing and verification for Warrant and receipt artifacts. The signed envelope includes a schema version, artifact type, algorithm, key ID, issuance time, canonical payload, and signature. Signature input is domain-separated and canonicalized.
 
-The planned asymmetric profile uses Ed25519 unless implementation constraints require another algorithm.
+The verifier checks the signature against the configured public key for the envelope's `key_id`. It rejects unknown key IDs, invalid signatures, unsupported schema/algorithm/artifact types, and payload or envelope tampering. Warrant signature verification authenticates the Warrant artifact; callers must still run the ordinary Warrant checks for execution, policy, runtime, epoch, validity, and lifecycle.
 
-A signed artifact must contain or be bound to:
+Example rotation behavior is supported by supplying a mapping of trusted key IDs to public keys to `Ed25519Verifier`:
+- **Overlap:** include both old and new keys while both should be trusted.
+- **Retirement:** remove the old key from the configured mapping; artifacts signed only by that key are then rejected as unknown.
+- **Unknown key:** rejected by default.
 
-- schema/version identifier
-- algorithm identifier
-- key identifier
-- canonical signed payload
-- signature
-- execution identity
-- policy identity and digest
-- runtime identity
-- relevant runtime epoch
-- issuance/creation time
-- verification-relevant evidence references
+This is verifier-configured key rotation, not a hosted key-management or revocation service. The library does not automatically manage key validity windows, persist trust policy, distribute keys, or determine when a key should be retired. Operators must distribute trust anchors through a channel independent of the artifact being verified.
 
-The signature covers canonical bytes, not an arbitrary JSON serialization.
+## Trust anchors and limits
 
-Verification must fail closed if:
-- the signature is invalid
-- the algorithm is unsupported
-- the key identifier is unknown
-- canonicalization differs
-- execution identity differs
-- policy identity or digest differs
-- runtime identity differs
-- epoch differs
-- schema/version is unsupported
-- required evidence is missing or stale
-
-## Trust anchors
-
-An asymmetric signature establishes authenticity relative to a configured public-key trust anchor.
-
-It does **not** by itself prove:
-- that the host is uncompromised
-- that the kernel is trustworthy
-- that the runtime provider enforced the action correctly
-- that an agent's intent was benign
-- that a policy was correct
-- that an external claim is true
+An asymmetric signature establishes authenticity relative to a configured public-key trust anchor. It does **not** by itself prove:
+- that the host is uncompromised or the kernel is trustworthy;
+- that the runtime provider enforced the action correctly;
+- that an agent's intent was benign or a policy was correct; or
+- that an external claim is true.
 
 Host/TPM/measured-boot attestation is a separate future trust layer.
 
 ## Evidence boundary
 
-For containment, the intended evidence chain is:
+For containment, the evidence chain is:
 
-1. WarrantKit establishes the authority and execution identity.
-2. AgentContainment performs the security-critical external enforcement.
+1. WarrantKit establishes authority and execution identity.
+2. AgentContainment performs security-critical external enforcement.
 3. The runtime produces enforcement evidence.
 4. Independent observation can establish the workload's resulting state.
-5. WarrantKit correlates these facts by execution identity, runtime identity, and epoch.
-6. The verifier checks the defined invariants and signature.
+5. WarrantKit correlates facts by execution identity, runtime identity, and epoch.
+6. The verifier checks the defined invariants and any required signature.
 7. The receipt records the resulting verification state.
 
-No evidence step grants, extends, or restores authority.
+No evidence step grants, extends, or restores authority. A valid signature cannot turn incomplete, stale, conflicting, or missing evidence into verified enforcement.
 
 ## Conflicts
 
-Conflicting evidence is not silently resolved.
+Conflicting evidence must remain explicitly conflicting or unverifiable rather than being promoted to verified. Examples include:
+- enforcement reports epoch 18 while an external record is anchored to epoch 17;
+- runtime identity differs between evidence sources; or
+- a replacement record is internally valid but conflicts with an earlier external anchor.
 
-Examples:
-- enforcement says epoch 18 while an external record is anchored to epoch 17
-- runtime identity differs between evidence sources
-- a replacement record is internally valid but inconsistent with an earlier external anchor
-
-The result must remain explicitly conflicting or unverifiable rather than being promoted to verified.
-
-## Key rotation
-
-The asymmetric profile must support:
-- stable key identifiers
-- explicit trust-anchor configuration
-- overlapping key validity during rotation
-- rejection of unknown or retired keys according to verifier policy
-- preservation of the key identifier in exported evidence
-
-Rotation changes the signing key, not the authority semantics.
+Correlation and integrity checks do not independently establish that the underlying observations are truthful.
 
 ## Compatibility
 
-The asymmetric profile should be introduced without breaking the authority/enforcement architecture.
-
-Compatibility rules must be explicit:
-- HMAC artifacts remain identifiable as HMAC artifacts.
+- HMAC and Ed25519 are distinct trust profiles and must be identified accurately.
 - HMAC must never be presented as non-repudiable.
-- Verifiers must identify which trust profile they applied.
+- Unknown or retired Ed25519 key IDs fail closed under the verifier's configured trust-anchor mapping.
 - A stronger signature does not upgrade weak or missing runtime evidence into verified enforcement.
+- Key rotation changes the signing key, not the authority semantics.
 
 ## Non-goals
 
-This trust model does not claim:
-- formal verification
-- universal host security
-- measured-boot attestation
-- policy correctness
-- agent intent correctness
-- reversal of side effects
-- universal truth of externally supplied claims
+This trust model does not claim formal verification, universal host security, measured-boot attestation, policy correctness, agent-intent correctness, reversal of completed side effects, or universal truth of externally supplied claims.
