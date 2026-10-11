@@ -10,72 +10,22 @@ WarrantKit is the authority/lifecycle layer; [AgentContainment](https://github.c
 
 ## First proof: replay a stale Warrant
 
-Install the package and run the no-root demo:
+Install the package and run the stale-Warrant replay proof:
 
 ```bash
 python -m pip install --upgrade warrantkit
 warrantkit demo
 ```
 
-To inspect the verifier contract directly from a source checkout, run this end-to-end controller-backed proof. It uses the installed AgentContainment engine, not a caller-supplied epoch. No root privileges, LLM, LangChain, or submodule checkout are required.
+The proof retains a serialized copy of an active Warrant, reads the current epoch from the AgentContainment controller runtime, performs containment, and verifies that the retained pre-containment Warrant is rejected against the advanced epoch. It needs no root privileges, LLM, LangChain, source clone, or submodule checkout.
 
-```bash
-git clone https://github.com/Therealdk8890/WarrantKit.git
-cd WarrantKit
-python -m pip install -e .
-python - <<'PY'
-from agentcontain import Policy, admit, build_agentcontainment_engine, contain
-from agentcontain.warrant import Warrant, verify_warrant
+To see the simulated incident-lifecycle walkthrough instead, run `warrantkit demo lifecycle`. That walkthrough explicitly reports that host enforcement verification is not claimed.
 
-engine = build_agentcontainment_engine("first-proof")
-admission = admit(
-    Policy("payments", capabilities=("payments_refund",)),
-    agent_id="payments-agent",
-    engine=engine,
-    runtime_id=engine.runtime_id,
-)
-if admission.warrant is None:
-    raise RuntimeError("the proof requires a runtime-bound Warrant")
-
-# Keep a serialized copy the agent could have retained before containment.
-retained = Warrant.from_dict(admission.warrant.to_dict())
-identity = admission.identity
-def verify_against_controller_epoch():
-    verify_warrant(
-        retained,
-        execution_id=identity.execution_id,
-        agent_id=identity.agent_id,
-        policy_id=identity.policy_id,
-        policy_digest=identity.policy_digest,
-        runtime_id=identity.runtime_id,
-        epoch=admission.engine.controller.runtime.epoch,
-    )
-
-verify_against_controller_epoch()
-print(f"controller epoch {admission.engine.controller.runtime.epoch}: ACCEPTED")
-
-contain(admission)
-current_epoch = admission.engine.controller.runtime.epoch
-print(f"controller epoch advanced to {current_epoch}")
-
-try:
-    verify_against_controller_epoch()
-except ValueError as exc:
-    if "epoch" not in str(exc):
-        raise
-    print(f"retained Warrant: REJECTED ({exc})")
-else:
-    raise SystemExit("FAIL: stale Warrant was accepted")
-PY
-```
-
-The important input is `runtime.epoch`, read from the controller-owned runtime after containment. The caller does not choose the epoch used for verification.
-
-This is a verifier-level and controller-backed proof, not a claim that the snippet itself kills a process. For kernel-enforced workload termination, use the separate [privileged Linux proof](docs/REAL_KILL_DEMO.md).
+The default demo proves verifier rejection against runtime state in one Python process. It does **not** prove that the controller is isolated from the verifier or that the controller state is protected from a compromised host. Those are deployment and host-boundary assumptions; see the [threat model](docs/THREAT_MODEL.md). For kernel-enforced workload termination, use the separate [privileged Linux proof](docs/REAL_KILL_DEMO.md).
 
 ## Boundary, stated plainly
 
-**The process that runs the agent must not hold credentials that let it perform protected side effects without the enforcement boundary.** Payment API keys, database credentials, cloud credentials, and equivalent secrets must be held by the trusted gateway/controller or by a downstream service that independently enforces the same authorization. If the agent can call the downstream API directly with its own unrestricted key, the gateway is advisory and WarrantKit cannot prevent that bypass.
+**The process that runs the agent must not hold credentials that let it perform protected side effects without the enforcement boundary.** Payment API keys, database credentials, cloud credentials, and equivalent secrets must be held by the trusted gateway/controller or by a downstream service that independently enforces the same authorization. If the agent can call the downstream API directly with its own unrestricted key, the gateway is advisory and WarrantKit cannot prevent that bypass. The proof runs the controller and verifier in the same Python process; controller isolation is a deployment/host-boundary requirement, not something this snippet demonstrates.
 
 WarrantKit's Warrant is a typed authority contract, not currently a bearer credential consumed directly by AgentContainment's ActionGateway. The gateway enforces controller-owned execution leases. A serialized or unsigned Warrant is not self-authenticating; Ed25519 attestation is available when a deployment configures a trusted public-key anchor.
 
@@ -121,6 +71,8 @@ A **Warrant** binds one execution to accepted policy identity and digest, runtim
 
 Evidence never grants authority. **Verified does not mean an external claim is true.**
 
+The current egress path is not a general destination-policy engine: a deny-all egress rule can act as a kill switch, but it does not implement an allowlist of approved destinations. See the [egress binding contract](docs/EGRESS_BINDING_CONTRACT.md).
+
 WarrantKit is not a sandbox, a universal host-isolation guarantee, a secret manager, a mechanism for reversing completed side effects, or a replacement for IAM, policy engines, cgroups, or independent provenance verification. It complements those controls by binding execution authority to runtime state and fencing stale authority after a security event.
 
 ## How WarrantKit differs
@@ -137,7 +89,8 @@ WarrantKit is not a sandbox, a universal host-isolation guarantee, a secret mana
 
 - [Threat model](docs/THREAT_MODEL.md)
 - [Real-kill demo requirements](docs/REAL_KILL_DEMO.md)
-- [Extended integrations, evidence, implementation status, and proof documentation](docs/INTEGRATIONS_AND_PROOFS.md)
+- [Implementation status: CI-tested versus planned](docs/INTEGRATIONS_AND_PROOFS.md#implementation-status)
+- [Extended integrations, evidence, and proof documentation](docs/INTEGRATIONS_AND_PROOFS.md)
 - [AgentContainment security contract](https://github.com/Therealdk8890/AgentContainment/blob/main/docs/SECURITY_CONTRACT.md)
 
 ## License
