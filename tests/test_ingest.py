@@ -4,7 +4,7 @@ from agentcontain.ingest import InMemoryEvidenceSink
 def _envelope(receipt=None, execution_id="exec-1"):
     return EvidenceEnvelope.from_execution(
         execution={"execution_id": execution_id, "agent_id": "agent-1", "policy_id": "policy-1", "policy_digest": "digest-1", "epoch": 0},
-        events=({"execution_id": execution_id, "sequence": 1, "name": "admitted"},),
+        events=({"execution_id": execution_id, "sequence": 1, "name": "admitted", "epoch": 0},),
         verification={"status": "verified", "method": "test"}, receipt=receipt,
     )
 
