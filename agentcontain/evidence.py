@@ -269,12 +269,16 @@ class EvidenceEnvelope:
         proof["runtime_binding"] = dict(binding)
         verification = dict(self.verification)
         verification.update({
-            "status": "verified",
-            "method": "runtime-pinned-second-evidence",
+            # Digests prove internal consistency only. Because the binding
+            # records are not authenticated by a trust anchor here, they must
+            # not elevate the envelope to verified.
+            "status": "observed",
+            "method": "runtime-pinned-structural-consistency",
             "scope": "external-runtime-enforcement",
             "verification_semantics": (
-                "verified means the defined runtime-pinning checks passed; "
-                "it does not establish the truth of unrelated claims"
+                "observed means runtime-binding structure, record digests, "
+                "identity, epoch, and timestamp ordering passed local checks; "
+                "producer authenticity and truth are not established"
             ),
         })
         return EvidenceEnvelope(
@@ -307,7 +311,9 @@ class EvidenceEnvelope:
         for event in self.events:
             if event.get("execution_id") != execution_id:
                 raise ValueError("event execution_id does not match envelope")
-            if "epoch" in event and event.get("epoch") != execution_epoch:
+            if "epoch" not in event:
+                raise ValueError("event epoch is required")
+            if event.get("epoch") != execution_epoch:
                 raise ValueError("event epoch does not match envelope execution")
             sequence = event.get("sequence")
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
