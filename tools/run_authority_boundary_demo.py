@@ -11,6 +11,7 @@ from __future__ import annotations
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 from agentcontain import Policy, admit, build_agentcontainment_engine, contain
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from agentcontain.integrations.langchain import LangChainWarrantError, wrap_langchain_tool
 from agentcontain.warrant import Warrant, verify_warrant
 
@@ -33,9 +34,10 @@ def main() -> int:
         agent_id="authority-demo",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
-    protected = wrap_langchain_tool(payments_refund, admission, gateway)
+    protected = wrap_langchain_tool(payments_refund, admission, gateway, warrant_verifier=verifier)
     if admission.warrant is None:
         raise RuntimeError("authority demo requires a Warrant")
     pre_containment_warrant = admission.warrant.to_dict()
