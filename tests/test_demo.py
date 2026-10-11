@@ -10,7 +10,7 @@ def test_cli_demo_is_no_root_and_rejects_stale_warrant(capsys) -> None:
     assert "Containment advanced runtime epoch" in output
     assert "Retained pre-containment Warrant: REJECTED" in output
     assert "does not prove kernel-level workload termination" in output
-    assert "does not isolate the" in output
+    assert "isolate the\\ncontroller from the verifier" in output
 
 
 def test_demo_lifecycle_has_distinct_detection_and_verification() -> None:
