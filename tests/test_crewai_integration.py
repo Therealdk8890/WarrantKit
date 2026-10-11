@@ -33,7 +33,8 @@ def test_crewai_tool_runs_with_matching_warrant_capability() -> None:
 
     engine = build_agentcontainment_engine("agent-crewai")
     signer = Ed25519Signer.generate("crewai-test")
-    admission = admit(        Policy("payments", capabilities=("payments_refund",)),
+    admission = admit(
+        Policy("payments", capabilities=("payments_refund",)),
         agent_id="agent-crewai",
         engine=engine,
         runtime_id=engine.runtime_id,
@@ -52,15 +53,17 @@ def test_crewai_tool_rejects_after_containment_before_side_effect() -> None:
     from agentcontain.integrations.crewai import CrewAIWarrantError, wrap_crewai_tool
 
     engine = build_agentcontainment_engine("agent-crewai-stale")
+    signer = Ed25519Signer.generate("crewai-test")
     admission = admit(
         Policy("payments", capabilities=("payments_refund",)),
         agent_id="agent-crewai-stale",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
     tool = PaymentTool()
-    protected = wrap_crewai_tool(tool, admission, gateway)
+    protected = wrap_crewai_tool(tool, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     contain(admission)
 
@@ -75,15 +78,17 @@ def test_crewai_tool_rejects_missing_capability_before_side_effect() -> None:
     from agentcontain.integrations.crewai import CrewAIWarrantError, wrap_crewai_tool
 
     engine = build_agentcontainment_engine("agent-crewai-capability")
+    signer = Ed25519Signer.generate("crewai-test")
     admission = admit(
         Policy("limited", capabilities=("read_only",)),
         agent_id="agent-crewai-capability",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
     tool = PaymentTool()
-    protected = wrap_crewai_tool(tool, admission, gateway)
+    protected = wrap_crewai_tool(tool, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     with pytest.raises(CrewAIWarrantError):
         protected.run(amount=25)
