@@ -122,6 +122,11 @@ class Warrant:
         policy_digest = getattr(policy, "policy_digest", None)
         if policy_digest is None:
             policy_digest = policy.digest
+        accepted_policy = getattr(policy, "policy", policy)
+        policy_capabilities = set(getattr(accepted_policy, "capabilities", ()))
+        requested_capabilities = tuple(capabilities)
+        if set(requested_capabilities) - policy_capabilities:
+            raise ValueError("warrant capabilities exceed accepted policy")
         return cls(
             warrant_id=warrant_id,
             issuer=issuer,
@@ -129,7 +134,7 @@ class Warrant:
             authority=WarrantAuthority(
                 policy_id=policy.policy_id,
                 policy_digest=policy_digest,
-                capabilities=tuple(capabilities),
+                capabilities=requested_capabilities,
                 constraints=tuple(constraints),
             ),
             runtime=WarrantRuntime(runtime_id, epoch),
