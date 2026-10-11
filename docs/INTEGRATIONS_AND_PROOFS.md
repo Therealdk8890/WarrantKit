@@ -115,14 +115,18 @@ Then wrap an existing CrewAI tool:
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from agentcontain.integrations.crewai import wrap_crewai_tool
 
 engine = build_agentcontainment_engine("payments-agent")
+signer = Ed25519Signer.generate("payments-issuer")  # load a persistent private key in production
+verifier = Ed25519Verifier({signer.key_id: signer.public_key()})  # public key is a trusted deployment anchor
 admission = admit(
     Policy("payments", capabilities=("payments_refund",)),
     agent_id="payments-agent",
     engine=engine,
     runtime_id=engine.runtime_id,
+    warrant_signer=signer,
 )
 
 gateway = ActionGateway(PolicyEngine(), engine.controller)
@@ -130,12 +134,13 @@ protected_refund = wrap_crewai_tool(
     payments_refund_tool,
     admission,
     gateway,
+    warrant_verifier=verifier,
 )
 
 agent = Agent(..., tools=[protected_refund])
 ~~~
 
-The adapter verifies the current Warrant and required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
+The adapter verifies the signed Warrant against the configured trusted Ed25519 public key, confirms it matches the active Warrant and current runtime epoch, and checks the required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
 
 ## Egress enforcement limitation
 
