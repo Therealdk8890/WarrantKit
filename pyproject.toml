@@ -36,7 +36,6 @@ attestation = [
 ]
 test = [
     "pytest>=7",
-    "interleave-test @ git+https://github.com/Therealdk8890/interleave-test.git",
     "warrantkit[attestation]",
 ]
 
