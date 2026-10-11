@@ -71,7 +71,7 @@ def _valid_records() -> dict:
             "producer": "test",
             "execution_id": execution_id,
             "runtime_evidence_sha256": "sha256:" + hashlib.sha256(evidence_bytes).hexdigest(),
-            "runtime_verifier_result": "VERIFIED",
+            "runtime_verifier_result": "OBSERVED",
         },
     }
 
