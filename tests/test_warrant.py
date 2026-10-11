@@ -115,3 +115,19 @@ def test_allowed_egress_is_not_promoted_to_warrant_authority() -> None:
 
     assert "allowed_egress" not in warrant.to_dict()["authority"]
     assert policy.allowed_egress == ("api.example.com:443",)
+
+
+def test_warrant_issue_rejects_capabilities_not_granted_by_policy() -> None:
+    policy = Policy("production", capabilities=("read",))
+    identity = ExecutionIdentity.create(
+        "agent-1", policy.policy_id, policy.digest, runtime_id="runtime-1"
+    )
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="exceed accepted policy"):
+        Warrant.issue(
+            warrant_id="w-escalated", issuer="controller",
+            agent_id=identity.agent_id, execution_id=identity.execution_id,
+            policy=policy, runtime_id="runtime-1", epoch=0,
+            issued_at=now, expires_at=now + timedelta(minutes=5),
+            capabilities=("read", "write"),
+        )
