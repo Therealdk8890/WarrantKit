@@ -40,8 +40,6 @@ if admission.warrant is None:
 # Keep a serialized copy the agent could have retained before containment.
 retained = Warrant.from_dict(admission.warrant.to_dict())
 identity = admission.identity
-runtime = admission.engine.controller.runtime
-
 def verify_against_controller_epoch():
     verify_warrant(
         retained,
@@ -50,11 +48,11 @@ def verify_against_controller_epoch():
         policy_id=identity.policy_id,
         policy_digest=identity.policy_digest,
         runtime_id=identity.runtime_id,
-        epoch=runtime.epoch,
+        epoch=admission.engine.controller.runtime.epoch,
     )
 
 verify_against_controller_epoch()
-print(f"controller epoch {runtime.epoch}: ACCEPTED")
+print(f"controller epoch {admission.engine.controller.runtime.epoch}: ACCEPTED")
 
 contain(admission)
 current_epoch = admission.engine.controller.runtime.epoch
