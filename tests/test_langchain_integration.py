@@ -1,3 +1,4 @@
+from dataclasses import replace
 import pytest
 
 from agentcontain import Policy, admit, build_agentcontainment_engine, contain, recontain
@@ -116,3 +117,44 @@ def test_recontainment_requires_prior_containment() -> None:
 
     assert admission.machine.state.value == "admitted"
     assert admission.identity.epoch == 0
+
+
+def test_langchain_wrapper_rejects_replaced_admission_warrant(tmp_path=None) -> None:
+    pytest.importorskip("langchain_core")
+    from langchain_core.tools import tool
+    from agentcontain.warrant import WarrantAuthority
+    from agentcontain.integrations.langchain import LangChainWarrantError, wrap_langchain_tool
+
+    calls = []
+
+    @tool
+    def protected_write(value: str) -> str:
+        """Perform a protected write."""
+        calls.append(value)
+        return "written"
+
+    engine = build_agentcontainment_engine("agent-langchain-replaced-warrant")
+    admission = admit(
+        Policy("limited", capabilities=("protected_write",)),
+        agent_id="agent-langchain-replaced-warrant",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+    )
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    wrapped = wrap_langchain_tool(protected_write, admission, gateway)
+
+    assert admission.warrant is not None
+    original = admission.warrant
+    admission.warrant = replace(
+        original,
+        authority=WarrantAuthority(
+            policy_id=original.authority.policy_id,
+            policy_digest=original.authority.policy_digest,
+            capabilities=("protected_write", "admin"),
+            constraints=original.authority.constraints,
+        ),
+    )
+
+    with pytest.raises(LangChainWarrantError, match="exceed the accepted policy"):
+        wrapped.invoke({"value": "must-not-run"})
+    assert calls == []
