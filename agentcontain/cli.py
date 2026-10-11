@@ -28,7 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     inspect = sub.add_parser("inspect", help="inspect an evidence envelope as an operator incident")
     inspect.add_argument("--evidence-file", required=True, help="JSON evidence envelope produced by WarrantKit")
     inspect.add_argument("--json", action="store_true", help="emit the complete operator view as JSON")
-    demo = sub.add_parser("demo", help="run the no-root proof semantics demo")
+    demo = sub.add_parser("demo", help="run the stale-Warrant replay proof (or the simulated lifecycle demo)")
+    demo.add_argument("mode", nargs="?", choices=("replay", "lifecycle"), default="replay", help="replay a stale Warrant (default) or show the simulated lifecycle")
     run = sub.add_parser("run", help="admit an execution and optionally contain it")
     run.add_argument("--policy", required=True, help="policy identifier")
     run.add_argument("--agent-id", default="agent", help="agent identity")
@@ -71,8 +72,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"warrantkit: {exc}", file=sys.stderr)
             return 1
     if args.command == "demo":
-        from .demo import run_demo
-        return run_demo()
+        from .demo import run_demo, run_stale_warrant_demo
+        if args.mode == "lifecycle":
+            return run_demo()
+        return run_stale_warrant_demo()
     if args.command == "run":
         policy = _policy_from_args(args)
         try:
