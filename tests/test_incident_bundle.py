@@ -329,3 +329,18 @@ def test_incident_bundle_rejects_unknown_manifest_claims(tmp_path: Path) -> None
 
     with pytest.raises(ValueError, match="manifest claims do not match the validated evidence contract"):
         verify_incident_bundle(bundle)
+
+
+def test_incident_bundle_rejects_active_warrant_with_revocation_timestamp(tmp_path: Path) -> None:
+    records = _valid_records()
+    records["authority"]["lifecycle"]["revoked_at"] = "2026-10-11T22:00:00+00:00"
+    with pytest.raises(ValueError, match="active, unrevoked pre-containment Warrant"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
