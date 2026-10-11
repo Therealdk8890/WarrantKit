@@ -43,12 +43,13 @@ def verify(document: Mapping[str, Any]) -> None:
     for expected_sequence, event in enumerate(events, 1):
         if not isinstance(event, Mapping): fail("event must be a mapping")
         if event.get("execution_id") != execution["execution_id"]: fail("event execution_id does not match execution")
-        if event.get("epoch", execution["epoch"]) != execution["epoch"]: fail("event epoch does not match execution")
+        if "epoch" not in event: fail("event epoch is required")
+        if event.get("epoch") != execution["epoch"]: fail("event epoch does not match execution")
         if event.get("sequence") != expected_sequence: fail("event sequence must be contiguous starting at 1")
     verification = document["verification"]
     if not isinstance(verification, Mapping): fail("verification must be a mapping")
     if verification.get("status") not in VALID_STATUSES: fail("invalid verification status")
-    if verification.get("status") != "verified": fail("portable verifier requires status=verified")
+    if verification.get("status") != "observed": fail("portable verifier requires status=observed; caller-authored verified status is not trusted")
     proof = document["proof"]
     if not isinstance(proof, Mapping) or not isinstance(proof.get("runtime_binding"), Mapping):
         fail("runtime-pinned evidence binding is required")
@@ -106,7 +107,7 @@ def main(argv: list[str]) -> int:
         verify(document)
     except Exception as exc:
         print(f"REJECTED: {exc}", file=sys.stderr); return 1
-    print("VERIFIED"); return 0
+    print("OBSERVED"); return 0
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
