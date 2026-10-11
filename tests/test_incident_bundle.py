@@ -94,7 +94,7 @@ def test_incident_bundle_round_trip(tmp_path: Path) -> None:
     manifest = _write_valid_bundle(bundle)
 
     result = verify_incident_bundle(bundle)
-    assert result["status"] == "VERIFIED"
+    assert result["status"] == "INTEGRITY_ONLY"
     assert result["incident_id"] == "INC-test"
     assert result["evidence_contract"] == "validated"
     # A key carried by the same bundle proves internal integrity only.
@@ -223,6 +223,7 @@ def test_incident_bundle_supports_external_trust_anchor(tmp_path: Path, monkeypa
         bundle,
         trusted_public_key_b64=public_key,
     )
+    assert result["status"] == "AUTHENTICATED"
     assert result["authenticity"] == "trusted-anchor"
 
     untrusted_key = Ed25519PrivateKey.generate().public_key().public_bytes(
@@ -234,3 +235,16 @@ def test_incident_bundle_supports_external_trust_anchor(tmp_path: Path, monkeypa
             bundle,
             trusted_public_key_b64=base64.b64encode(untrusted_key).decode("ascii"),
         )
+
+
+def test_incident_bundle_rejects_receipt_key_id_mismatch(tmp_path: Path) -> None:
+    bundle = tmp_path / "incident"
+    _write_valid_bundle(bundle)
+
+    receipt_path = bundle / "verification-receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["key_id"] = "different-key"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="public key key_id does not match receipt"):
+        verify_incident_bundle(bundle)

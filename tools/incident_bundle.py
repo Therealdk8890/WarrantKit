@@ -303,6 +303,16 @@ def verify_incident_bundle(
     receipt = json.loads(
         (bundle_dir / "verification-receipt.json").read_text(encoding="utf-8")
     )
+    if not isinstance(key_record, dict):
+        raise ValueError("bundle public key record must be a JSON object")
+    if key_record.get("schema_version") != "warrantkit.incident-public-key/v1":
+        raise ValueError("unsupported incident public key schema")
+    if key_record.get("algorithm") != "ed25519" or key_record.get("encoding") != "base64":
+        raise ValueError("unsupported incident public key algorithm or encoding")
+    if not isinstance(key_record.get("key_id"), str) or not key_record["key_id"]:
+        raise ValueError("incident public key is missing key_id")
+    if not isinstance(receipt, dict) or receipt.get("key_id") != key_record["key_id"]:
+        raise ValueError("bundle public key key_id does not match receipt")
 
     embedded = base64.b64decode(key_record["public_key"], validate=True)
     supplied = (
@@ -323,9 +333,12 @@ def verify_incident_bundle(
     if payload["manifest_sha256"] != _sha256(bundle_dir / "manifest.json"):
         raise ValueError("signed manifest digest mismatch")
 
+    anchored = trusted_public_key_b64 is not None
     return {
-        "status": "VERIFIED",
+        # Keep the top-level status aligned with the actual trust boundary:
+        # a bundle-provided key can prove internal integrity, not producer identity.
+        "status": "AUTHENTICATED" if anchored else "INTEGRITY_ONLY",
         "incident_id": manifest["incident_id"],
-        "authenticity": "trusted-anchor" if trusted_public_key_b64 else "bundle-key-integrity-only",
+        "authenticity": "trusted-anchor" if anchored else "bundle-key-integrity-only",
         "evidence_contract": "validated",
     }
