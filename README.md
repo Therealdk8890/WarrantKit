@@ -4,56 +4,96 @@
 
 **Authority that expires when the runtime state that created it changes.**
 
-> **Don't ask the agent to enforce its own boundaries. Enforce them from outside the agent trust boundary.**
+A Warrant binds an execution to an accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, a retained pre-containment Warrant is stale. A verifier that checks the current epoch rejects it.
 
-The core invariant is simple: **authority must not survive the runtime state that created it.** A Warrant is bound to an execution and runtime epoch; when containment or recovery advances that epoch, a retained pre-containment Warrant becomes stale and cannot be replayed.
+WarrantKit is the entry point for this authority contract. It uses [AgentContainment](https://github.com/Therealdk8890/AgentContainment) as its runtime enforcement engine. Start here; the engine is a dependency, not a separate product to evaluate first. DProvenanceKit and ClaimProofKit address adjacent provenance/claim-verification problems, not the core WarrantKit install path.
 
-WarrantKit is the platform/control layer around the AgentContainment enforcement engine. The repository ships local authorization, admission, runtime containment coordination, epoch fencing, recovery gating, evidence envelopes, fleet-governance primitives, external evidence contracts, cryptographic attestation primitives, and offline verification receipts. Hosted multi-tenant operations and enterprise integrations are not shipped here.
+## First proof: replay a stale Warrant (no root, no submodule)
 
-The practical question is: **what is an autonomous agent allowed to do, what happens when it crosses that boundary, how is its authority revoked, and what evidence can be checked afterward?**
+Use the repository version for this proof because the published PyPI README/package can lag the current source:
 
-## 30-second demo
+```bash
+git clone https://github.com/Therealdk8890/WarrantKit.git
+cd WarrantKit
+python -m pip install -e .
+```
 
-The no-root demo shows the shipped lifecycle without claiming kernel-level enforcement:
+This plain clone does not fetch the AgentContainment submodule. The package dependency is installed through Python packaging; the verifier-only demo does not need the submodule, LangChain, root privileges, or cgroup v2.
+
+Then run this small verifier-level attack. It serializes a valid Warrant at epoch 0, verifies it, advances the current runtime epoch to 1, and tries the same serialized Warrant again:
+
+```bash
+python - <<'PY'
+from datetime import datetime, timedelta, timezone
+
+from agentcontain import Policy
+from agentcontain.warrant import Warrant, verify_warrant
+
+now = datetime.now(timezone.utc)
+policy = Policy("payments", capabilities=("payments_refund",))
+warrant = Warrant.issue(
+    warrant_id="demo-warrant",
+    issuer="demo-controller",
+    agent_id="payments-agent",
+    execution_id="execution-1",
+    policy=policy,
+    runtime_id="runtime-1",
+    epoch=0,
+    issued_at=now - timedelta(seconds=1),
+    expires_at=now + timedelta(minutes=5),
+    capabilities=("payments_refund",),
+)
+serialized = warrant.to_dict()
+retained = Warrant.from_dict(serialized)
+
+def check(current_epoch):
+    verify_warrant(
+        retained,
+        execution_id="execution-1",
+        agent_id="payments-agent",
+        policy_id=policy.policy_id,
+        policy_digest=policy.digest,
+        runtime_id="runtime-1",
+        epoch=current_epoch,
+        now=now,
+    )
+
+check(0)
+print("epoch 0: ACCEPTED")
+try:
+    check(1)
+except ValueError as exc:
+    print(f"epoch 1: REJECTED ({exc})")
+else:
+    raise SystemExit("FAIL: stale Warrant was accepted")
+PY
+```
+
+Expected result:
+
+```text
+epoch 0: ACCEPTED
+epoch 1: REJECTED (warrant epoch does not match current runtime epoch)
+```
+
+This is the smallest useful proof of the thesis: **old authority does not survive an epoch change when the verifier checks the current epoch.** It requires no root privileges, Linux cgroups, LangChain, or submodule checkout.
+
+**Boundary, stated plainly:** this snippet tests Warrant verification logic; it does not kill a process or enforce a tool call by itself. A tool, API, or side effect that bypasses Warrant verification and the controller-owned ActionGateway is outside this enforcement path. WarrantKit cannot revoke authority from an arbitrary downstream system that never checks it.
+
+## Second act: framework tool, then external containment
+
+For the end-to-end framework proof, clone the repository with its AgentContainment submodule and install the optional LangChain extra:
 
 ```bash
 git clone --recurse-submodules https://github.com/Therealdk8890/WarrantKit.git
 cd WarrantKit
-python -m pip install ./AgentContainment
-python -m pip install .
-warrantkit demo
-```
-
-For actual host enforcement, use the environment-gated Linux proof below.
-
-## See the authority boundary work
-
-The fastest way to understand WarrantKit is to run the deterministic framework proof. It uses a real LangChain tool, but no LLM, network, or API key.
-
-```bash
-python -m pip install ./AgentContainment
 python -m pip install ".[langchain]"
 python tools/run_authority_boundary_demo.py
 ```
 
-The sequence is deliberately concrete:
+This deterministic proof uses a real LangChain tool but no LLM, network call, or API key. It invokes the protected tool once, advances containment through the external runtime boundary, then demonstrates that retained authority is rejected before a second side effect can run.
 
-```text
-Warrant + capability
-        ↓
-protected tool call → side effect succeeds
-        ↓
-external containment
-        ↓
-runtime epoch 0 → 1
-        ↓
-serialized old Warrant → REJECTED
-retained framework tool → REJECTED
-        ↓
-second side effect → NEVER REACHED
-```
-
-Recorded CI output from the proof:
+Recorded CI output from the framework proof:
 
 ```text
 [1/5] admitting a tool-using execution under a Warrant
@@ -71,7 +111,29 @@ proof complete
 
 **What this proves:** a framework tool can be placed behind WarrantKit authority and an external AgentContainment action boundary; after containment, retained authority is rejected before the underlying tool executes.
 
-**What this does not prove:** kernel-level workload termination, universal host isolation, or that a serialized Warrant is itself a bearer credential accepted by the ActionGateway. The privileged Linux proof below covers the kernel enforcement boundary separately.
+**What this does not prove:** kernel-level workload termination, universal host isolation, or that a serialized Warrant is itself a bearer credential accepted directly by the ActionGateway. The privileged Linux proof is a separate step.
+
+## What to install and what each component does
+
+- **WarrantKit** — the primary package and starting point for Warrant issuance, verification, policy binding, and integrations.
+- **AgentContainment** — the runtime enforcement engine and controller-owned ActionGateway used by WarrantKit. Its epoch-fenced execution leases guard only actions that actually pass through that boundary.
+- **DProvenanceKit** — a separate provenance/integrity verifier; it does not grant runtime authority or prove that a claim is true.
+- **ClaimProofKit** — a separate claim-evidence project, not required to install or run WarrantKit.
+
+WarrantKit's current egress control is deliberately conservative: the shipped enforcement path is deny-by-default/deny-all where destination-specific enforcement is not implemented. Do not read this as a complete destination allowlist policy engine or as an OPA replacement. OPA can evaluate policy; WarrantKit's differentiator is the runtime authority and epoch-fencing boundary around protected actions. The two could be complementary.
+
+## What is a Warrant?
+
+A **Warrant** is WarrantKit's portable authority contract for one execution. It binds execution identity, accepted policy identity and digest, runtime identity and epoch, validity/revocation state, capabilities, constraints, and required evidence.
+
+Today the Warrant is a typed, transport-neutral authority object rather than a credential that the runtime ActionGateway consumes directly. WarrantKit verifies it against the exact execution, policy, runtime, epoch, and validity window at authority boundaries. AgentContainment's controller and ActionGateway remain the runtime enforcement boundary, using controller-owned execution leases invalidated by runtime state changes. Ed25519 signing/verification is shipped as an optional attestation layer; a signature does not make a Warrant authoritative without a trusted public-key anchor.
+
+**Warrant = authority.**  
+**Evidence = what was observed or produced.**  
+**Verification = whether defined checks succeeded.**  
+**Receipt = a record of evidence and its stated authentication status.**
+
+Evidence never grants authority. Verification does not prove an external claim is true.
 
 ## LangChain integration
 
