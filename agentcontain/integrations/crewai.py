@@ -28,10 +28,20 @@ def _current_runtime(admission: Admission, gateway):
     return runtime
 
 
-def _verify_current_authority(admission: Admission, gateway) -> None:
+def _verify_current_authority(admission: Admission, gateway, warrant_verifier) -> None:
     warrant = admission.warrant
     if warrant is None:
         raise CrewAIWarrantError("execution has no Warrant authority")
+    if warrant_verifier is None:
+        raise CrewAIWarrantError("a trusted Ed25519 Warrant verifier is required")
+    if admission.warrant_attestation is None:
+        raise CrewAIWarrantError("execution has no signed Warrant attestation; issue with warrant_signer")
+    try:
+        signed_warrant = warrant_verifier.verify_warrant(admission.warrant_attestation)
+    except (TypeError, ValueError) as exc:
+        raise CrewAIWarrantError(f"Warrant signature verification failed: {exc}") from exc
+    if signed_warrant != warrant:
+        raise CrewAIWarrantError("signed Warrant payload does not match the active Warrant")
     snapshot = _current_runtime(admission, gateway).snapshot()
     try:
         verify_warrant(
@@ -55,6 +65,7 @@ def wrap_crewai_tool(
     admission: Admission,
     gateway=None,
     *,
+    warrant_verifier,
     capability: str | None = None,
     risk: int = 0,
     resource: str = "crewai-tool",
@@ -89,7 +100,7 @@ def wrap_crewai_tool(
     original_description = getattr(tool, "description", None)
 
     def invoke_authorized(**kwargs: Any) -> Any:
-        _verify_current_authority(admission, gateway)
+        _verify_current_authority(admission, gateway, warrant_verifier)
         warrant = admission.warrant
         assert warrant is not None
         if required_capability not in warrant.authority.capabilities:
