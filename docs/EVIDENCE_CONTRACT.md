@@ -26,8 +26,10 @@ The serialized document is agentcontain.evidence/v2 and contains exactly:
 - provenance
 - external_evidence
 
-The portable verifier requires verification.status=verified and
-proof.runtime_binding.
+The portable verifier requires verification.status=observed and
+proof.runtime_binding. The artifact's producer-supplied status is not trusted
+as a verification result; the independent verifier evaluates the required
+invariants itself and reports its own result.
 
 ## Runtime binding
 
