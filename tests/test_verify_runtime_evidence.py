@@ -63,7 +63,7 @@ def make_evidence() -> dict:
         "execution": execution,
         "events": [{"execution_id": "exec-1", "epoch": 7, "sequence": 1}],
         "enforcement": {},
-        "verification": {"status": "verified"},
+        "verification": {"status": "observed"},
         "proof": {"runtime_binding": binding},
         "receipt": {},
         "governance": {},
@@ -101,4 +101,20 @@ def test_epoch_must_match_execution() -> None:
     document["proof"]["runtime_binding"]["epoch"] = 8
 
     with pytest.raises(ValueError, match="runtime binding epoch does not match execution"):
+        verifier.verify(document)
+
+
+def test_portable_verifier_rejects_caller_authored_verified_status() -> None:
+    document = make_evidence()
+    document["verification"]["status"] = "verified"
+
+    with pytest.raises(ValueError, match="requires status=observed"):
+        verifier.verify(document)
+
+
+def test_portable_verifier_rejects_event_without_epoch() -> None:
+    document = make_evidence()
+    document["events"][0].pop("epoch")
+
+    with pytest.raises(ValueError, match="event epoch is required"):
         verifier.verify(document)
