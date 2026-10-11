@@ -45,6 +45,7 @@ def _envelope(
                 "execution_id": "exec-cross-repo-1",
                 "sequence": 1,
                 "name": "admission_verified",
+                "epoch": 7,
             },
         ),
         enforcement={"complete": True, "external_verified": True},
