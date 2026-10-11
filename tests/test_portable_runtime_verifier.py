@@ -32,7 +32,7 @@ def _fixture():
 def test_standalone_verifier_accepts_valid_fixture(tmp_path):
     result = _run(_fixture(), tmp_path)
     assert result.returncode == 0
-    assert result.stdout.strip() == "VERIFIED"
+    assert result.stdout.strip() == "OBSERVED"
 
 
 def test_standalone_verifier_requires_second_evidence_channel(tmp_path):
