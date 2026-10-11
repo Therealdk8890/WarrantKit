@@ -103,6 +103,7 @@ class Admission:
     engine: EnforcementEngine
     policy: PolicyBundle
     warrant: Warrant | None = None
+    warrant_attestation: dict | None = None
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
 
@@ -176,6 +177,7 @@ def admit(
     runtime_id: str | None = None,
     warrant_issuer: str = "warrantkit",
     warrant_ttl: timedelta = timedelta(hours=1),
+    warrant_signer=None,
 ) -> Admission:
     """Validate, issue, and admit one execution under a bounded Warrant.
 
@@ -217,6 +219,12 @@ def admit(
             epoch=identity.epoch,
             now=issued_at,
         )
+    warrant_attestation = None
+    if warrant is not None and warrant_signer is not None:
+        sign_warrant = getattr(warrant_signer, "sign_warrant", None)
+        if not callable(sign_warrant):
+            raise TypeError("warrant_signer must provide sign_warrant(warrant)")
+        warrant_attestation = sign_warrant(warrant).to_dict()
     machine = PlatformStateMachine(identity)
     machine.admit(
         details={"warrant_id": warrant.warrant_id} if warrant is not None else None
@@ -227,6 +235,7 @@ def admit(
         engine=engine,
         policy=bundle,
         warrant=warrant,
+        warrant_attestation=warrant_attestation,
     )
 
 @_synchronized
@@ -241,9 +250,11 @@ def _revoke_warrant(admission: Admission) -> None:
         admission.warrant = admission.warrant.revoke(
             revoked_at=datetime.now(timezone.utc)
         )
+    # A revoked Warrant is a new payload and must never inherit the old signature.
+    admission.warrant_attestation = None
 
 
-def _issue_current_warrant(admission: Admission) -> Warrant:
+def _issue_current_warrant(admission: Admission, warrant_signer=None) -> Warrant:
     if admission.identity.runtime_id is None:
         raise RuntimeError("runtime identity is required for Warrant authority")
     issued_at = datetime.now(timezone.utc)
@@ -270,6 +281,8 @@ def _issue_current_warrant(admission: Admission) -> Warrant:
         now=issued_at,
     )
     admission.warrant = warrant
+    sign_warrant = getattr(warrant_signer, "sign_warrant", None)
+    admission.warrant_attestation = sign_warrant(warrant).to_dict() if callable(sign_warrant) else None
     return warrant
 
 @_synchronized
@@ -437,7 +450,7 @@ def issue_recovery_authorization(admission: Admission):
 
 
 @_synchronized
-def recover(admission: Admission, authorization) -> int:
+def recover(admission: Admission, authorization, *, warrant_signer=None) -> int:
     """Recover through the controller-owned authority and record lifecycle state."""
     operation = getattr(admission.engine, "recover", None)
     if operation is None:
@@ -458,7 +471,7 @@ def recover(admission: Admission, authorization) -> int:
     # is authoritative. Preserve legacy provider-neutral adapters that do not
     # expose a runtime identity.
     if admission.identity.runtime_id is not None:
-        _issue_current_warrant(admission)
+        _issue_current_warrant(admission, warrant_signer=warrant_signer)
     return epoch
 
 
