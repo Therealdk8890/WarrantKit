@@ -22,6 +22,7 @@ from langchain_core.tools import tool
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from agentcontain.integrations.langchain import wrap_langchain_tool
 from agentcontain.integrations.langchain_middleware import WarrantKitMiddleware
 
@@ -124,16 +125,19 @@ def main() -> int:
         parser.error("--concurrency must contain positive worker counts")
 
     engine = build_agentcontainment_engine("gateway-benchmark")
+    signer = Ed25519Signer.generate("gateway-benchmark-issuer")
+    verifier = Ed25519Verifier({signer.key_id: signer.public_key()})
     admission = admit(
         Policy("benchmark", capabilities=("noop_tool",)),
         agent_id="gateway-benchmark",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     # ActionGateway retains its full decision history by default; do not silently truncate evidence.
     gateway = ActionGateway(PolicyEngine(), engine.controller)
-    protected = wrap_langchain_tool(noop_tool, admission, gateway)
-    middleware = WarrantKitMiddleware(admission, gateway)
+    protected = wrap_langchain_tool(noop_tool, admission, gateway, warrant_verifier=verifier)
+    middleware = WarrantKitMiddleware(admission, gateway, warrant_verifier=verifier)
 
     # Warm both code paths before collecting samples.
     for i in range(args.warmup):
