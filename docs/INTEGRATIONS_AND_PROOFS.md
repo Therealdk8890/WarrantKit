@@ -78,6 +78,20 @@ agent = create_agent(
 )
 ```
 
+### Authority check versus runtime enforcement
+
+The adapter and ActionGateway enforce related but distinct objects:
+
+1. The adapter verifies the Warrant's execution identity, policy binding, validity, capabilities, and epoch against the current controller runtime.
+2. The adapter submits the action through AgentContainment's ActionGateway.
+3. The gateway's final runtime enforcement uses controller-owned execution leases; it does not consume the serialized Warrant as a bearer credential.
+
+The intended protected path requires both checks. The Warrant check must reject stale authority before the tool handler reaches the gateway, while the gateway remains the final enforcement point. The framework proof demonstrates this path by asserting that the first side effect executes before containment and that a retained pre-containment Warrant cannot reach the second side effect afterward. This is not a claim that the Warrant and lease are the same object.
+
+**Issuer-authentication boundary:** Protected LangChain wrapper, middleware, and CrewAI adapter paths require an Ed25519-signed Warrant and verify it against a deployment-configured trusted public key before the tool handler runs. This authenticates the signed Warrant payload; it does not make the Warrant a bearer credential consumed by ActionGateway. The gateway's controller-owned execution lease remains the final enforcement point. Production deployments must keep the private signing key outside the agent process and provision the public trust anchor independently.
+
+**Epoch-fencing cost:** advancing the runtime epoch invalidates every Warrant bound to the previous epoch, not just the Warrant associated with the triggering action. This coarse-grained invalidation avoids maintaining a per-Warrant revocation list, but legitimate work bound to the old epoch must obtain fresh authority before continuing.
+
 The middleware derives the default capability from each tool name and can override that mapping explicitly:
 
 ```python
@@ -93,13 +107,13 @@ Authority is checked before the LangChain tool handler is allowed to run. AgentC
 
 This path is synchronous in v1; async-native middleware execution is not claimed yet. In a local Python 3.11/Linux microbenchmark using an in-process no-op tool (50,000 measured calls per path), the native middleware hook measured about 230 µs median per call versus 201 µs for direct LangChain invocation, while the wrapper measured about 441 µs. Treat these as directional microbenchmark results, not production capacity claims; real tool latency, host load, and concurrent agents change the result. The reproducible script is `tools/benchmark_gateway_overhead.py`.
 
-The LangChain extra installs the Ed25519 dependency because protected LangChain calls require signed Warrants. For standalone Warrant/receipt attestation without LangChain, install:
+For Ed25519 Warrant and receipt attestation, install the optional cryptographic dependency explicitly:
 
 ```bash
 python -m pip install "warrantkit[attestation]"
 ```
 
-The base package and 30-second no-root demo do not require the attestation dependency. In production, load the signing key from a protected key-management boundary and configure the verifier with a separately trusted public key; do not generate a new ephemeral signing key per process restart.
+The base package and 30-second no-root demo do not require the attestation dependency.
 
 ## CrewAI integration
 
