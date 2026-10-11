@@ -123,8 +123,8 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
         raise ValueError("issued authority runtime does not match runtime evidence execution")
     if authority_runtime.get("epoch") != before:
         raise ValueError("issued authority epoch does not match containment's pre-transition epoch")
-    if authority_lifecycle.get("state") != "active":
-        raise ValueError("issued authority must be the active pre-containment Warrant")
+    if authority_lifecycle.get("state") != "active" or authority_lifecycle.get("revoked_at") is not None:
+        raise ValueError("issued authority must be the active, unrevoked pre-containment Warrant")
 
     sequences = [event.get("sequence") for event in events]
     if any(not isinstance(value, int) or isinstance(value, bool) for value in sequences):
