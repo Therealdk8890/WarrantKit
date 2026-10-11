@@ -204,3 +204,25 @@ def test_cli_inspect_json_is_machine_readable(tmp_path, capsys) -> None:
 
 def test_cli_primary_command_name() -> None:
     assert cli.build_parser().prog == "warrantkit"
+
+
+def test_cli_demo_defaults_to_stale_warrant_replay(monkeypatch) -> None:
+    from agentcontain import demo
+
+    called = []
+    monkeypatch.setattr(demo, "run_stale_warrant_demo", lambda: called.append("replay") or 0)
+    monkeypatch.setattr(demo, "run_demo", lambda: called.append("lifecycle") or 0)
+
+    assert cli.main(["demo"]) == 0
+    assert called == ["replay"]
+
+
+def test_cli_demo_lifecycle_is_explicit(monkeypatch) -> None:
+    from agentcontain import demo
+
+    called = []
+    monkeypatch.setattr(demo, "run_stale_warrant_demo", lambda: called.append("replay") or 0)
+    monkeypatch.setattr(demo, "run_demo", lambda: called.append("lifecycle") or 0)
+
+    assert cli.main(["demo", "lifecycle"]) == 0
+    assert called == ["lifecycle"]
