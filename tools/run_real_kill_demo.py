@@ -102,10 +102,21 @@ def main() -> int:
             raise AssertionError("revoked Warrant remained executable")
 
         print("[5/8] independently checking terminal runtime state")
-        assert not supervisor.is_populated(cgroup)
         child.wait(timeout=5)
-        assert child.returncode is not None
-        print(f"    workload exited with code {child.returncode}")
+        # Capture terminal-state facts from the OS-facing supervisor and child
+        # process, rather than hard-coding the evidence fields below.
+        cgroup_populated_after = supervisor.is_populated(cgroup)
+        workload_exit_code = child.returncode
+        terminal_state_independently_observed = (
+            not cgroup_populated_after and workload_exit_code is not None
+        )
+        if not terminal_state_independently_observed:
+            raise RuntimeError(
+                "terminal state not established: cgroup is populated or workload is still running"
+            )
+        terminal_observed_at = time.time()
+        print(f"    cgroup_populated={cgroup_populated_after}")
+        print(f"    workload exited with code {workload_exit_code}")
 
         print("[6/8] exporting runtime-pinned evidence")
         authority_export = getattr(admission.engine, "authority_revocation_evidence_record", None)
@@ -134,9 +145,12 @@ def main() -> int:
             "runtime_id": runtime_id,
             "agent_id": admission.identity.agent_id,
             "epoch": admission.identity.epoch,
-            "state": "TERMINATED",
-            "observed_at": time.time(),
-            "can_execute": False,
+            "state": "TERMINATED" if terminal_state_independently_observed else "UNKNOWN",
+            "observed_at": terminal_observed_at,
+            "can_execute": not terminal_state_independently_observed,
+            "cgroup_populated": cgroup_populated_after,
+            "workload_exit_code": workload_exit_code,
+            "observation_source": "linux_cgroup_supervisor_and_child_wait",
         }
         binding = {
             "schema_version": "agentcontain.runtime-binding/v1",
@@ -234,11 +248,13 @@ def main() -> int:
                     "runtime_id": runtime_id,
                     "agent_id": admission.identity.agent_id,
                     "epoch": admission.identity.epoch,
-                    "runtime_state": "TERMINATED",
-                    "can_execute": False,
-                    "cgroup_populated": False,
-                    "workload_exit_code": child.returncode,
-                    "terminal_state_independently_observed": True,
+                    "runtime_state": observation_record["state"],
+                    "can_execute": observation_record["can_execute"],
+                    "cgroup_populated": cgroup_populated_after,
+                    "workload_exit_code": workload_exit_code,
+                    "terminal_state_independently_observed": terminal_state_independently_observed,
+                    "observed_at": terminal_observed_at,
+                    "observation_source": "linux_cgroup_supervisor_and_child_wait",
                 },
                 provenance={
                     "schema_version": "warrantkit.incident-provenance/v1",
