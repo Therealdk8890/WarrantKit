@@ -1,8 +1,9 @@
 name: Published package smoke test
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["Publish WarrantKit to PyPI"]
+    types: [completed]
   workflow_dispatch:
   schedule:
     - cron: "17 8 * * 1"
@@ -12,6 +13,7 @@ permissions:
 
 jobs:
   published-artifacts:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     name: PyPI install and authority-boundary proof
     runs-on: ubuntu-latest
     steps:
