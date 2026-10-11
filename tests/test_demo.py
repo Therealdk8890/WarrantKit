@@ -1,20 +1,16 @@
 from agentcontain import cli
 
 
-def test_cli_demo_is_no_root_and_verifies_receipt(capsys) -> None:
+def test_cli_demo_is_no_root_and_rejects_stale_warrant(capsys) -> None:
     assert cli.main(["demo"]) == 0
 
     output = capsys.readouterr().out
-    assert "SIMULATED (no kernel enforcement)" in output
-    assert "Incident" in output
-    assert "Trigger:     anomaly_detected" in output
-    assert "Status:      VERIFIED" in output
-    assert "Proof:       OBSERVED" in output
-    assert "Evidence:    OBSERVED" in output
-    assert "Verification: NOT CLAIMED (simulated)" in output
-    assert "Receipt:     AUTHENTICATED" in output
-    assert "Receipt ID:" in output
-    assert "Verified ≠ claim is true" in output
+    assert "stale-Warrant replay proof" in output
+    assert "retained Warrant ACCEPTED" in output
+    assert "Containment advanced runtime epoch" in output
+    assert "Retained pre-containment Warrant: REJECTED" in output
+    assert "does not prove kernel-level workload termination" in output
+    assert "isolate the\ncontroller from the verifier" in output
 
 
 def test_demo_lifecycle_has_distinct_detection_and_verification() -> None:

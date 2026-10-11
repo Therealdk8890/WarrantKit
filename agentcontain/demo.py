@@ -122,3 +122,65 @@ def run_demo() -> int:
     print("operator projection, and receipt integrity.")
     print("It does not prove real host or kernel containment.")
     return 0
+
+
+def run_stale_warrant_demo() -> int:
+    """Demonstrate stale-Warrant rejection against the runtime epoch."""
+    from .engine import build_agentcontainment_engine, contain
+    from .warrant import Warrant, verify_warrant
+
+    engine = build_agentcontainment_engine("first-proof")
+    admission = admit(
+        Policy("payments", capabilities=("payments_refund",)),
+        agent_id="payments-agent",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+    )
+    if admission.warrant is None:
+        raise RuntimeError("the proof requires a runtime-bound Warrant")
+
+    # Retain an active serialized copy, as an agent could before containment.
+    retained = Warrant.from_dict(admission.warrant.to_dict())
+    identity = admission.identity
+
+    def verify_retained() -> None:
+        # Read the epoch from runtime state; do not accept it from the caller.
+        verify_warrant(
+            retained,
+            execution_id=identity.execution_id,
+            agent_id=identity.agent_id,
+            policy_id=identity.policy_id,
+            policy_digest=identity.policy_digest,
+            runtime_id=identity.runtime_id,
+            epoch=admission.engine.controller.runtime.epoch,
+        )
+
+    initial_epoch = admission.engine.controller.runtime.epoch
+    verify_retained()
+    print("WarrantKit — stale-Warrant replay proof")
+    print("---------------------------------------")
+    print(f"Runtime epoch {initial_epoch}: retained Warrant ACCEPTED")
+
+    contain(admission)
+    current_epoch = admission.engine.controller.runtime.epoch
+    if current_epoch == initial_epoch:
+        raise RuntimeError(
+            "containment did not advance the controller runtime epoch; "
+            "this environment cannot demonstrate epoch fencing"
+        )
+    print(f"Containment advanced runtime epoch to {current_epoch}")
+
+    try:
+        verify_retained()
+    except ValueError as exc:
+        if "epoch" not in str(exc):
+            raise
+        print(f"Retained pre-containment Warrant: REJECTED ({exc})")
+    else:
+        raise RuntimeError("FAIL: stale Warrant was accepted")
+
+    print()
+    print("This proves verifier rejection against the controller's runtime epoch.")
+    print("It does not prove kernel-level workload termination or isolate the")
+    print("controller from the verifier; use the privileged Linux proof for that.")
+    return 0

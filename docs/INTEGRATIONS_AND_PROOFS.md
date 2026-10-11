@@ -131,6 +131,10 @@ agent = Agent(..., tools=[protected_refund])
 
 The adapter verifies the current Warrant and required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
 
+## Egress enforcement limitation
+
+A deny-all egress rule can serve as a kill switch, but it is not destination policy: it cannot express or enforce an allowlist of approved destinations. `Policy.allowed_egress` is not proof of enforcement until a provider-specific binding is installed and independently verified; see [EGRESS_BINDING_CONTRACT.md](EGRESS_BINDING_CONTRACT.md).
+
 ## Implementation status
 
 **Implemented** means code is present; **CI-tested** means automated CI covers the behavior; **privileged integration-tested** means the proof requires the specified host environment.
