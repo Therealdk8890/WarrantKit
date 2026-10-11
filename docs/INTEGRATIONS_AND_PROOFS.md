@@ -20,6 +20,7 @@ from langchain_core.tools import tool
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from agentcontain.integrations.langchain import wrap_langchain_tool
 
 @tool
@@ -28,11 +29,14 @@ def payments_refund(amount: int) -> str:
     return f"refunded:{amount}"
 
 engine = build_agentcontainment_engine("payments-agent")
+signer = Ed25519Signer.generate("payments-issuer")  # load a persistent private key in production
+verifier = Ed25519Verifier({signer.key_id: signer.public_key()})  # public key is a trusted deployment anchor
 admission = admit(
     Policy("payments", capabilities=("payments_refund",)),
     agent_id="payments-agent",
     engine=engine,
     runtime_id=engine.runtime_id,
+    warrant_signer=signer,
 )
 
 gateway = ActionGateway(PolicyEngine(), engine.controller)
@@ -40,6 +44,7 @@ protected_refund = wrap_langchain_tool(
     payments_refund,
     admission,
     gateway,
+    warrant_verifier=verifier,
 )
 
 agent = create_agent(model, tools=[protected_refund])
@@ -64,7 +69,7 @@ Use the middleware when you want one controller-owned authority boundary around 
 from langchain.agents import create_agent
 from agentcontain.integrations.langchain_middleware import warrantkit_middleware
 
-middleware = warrantkit_middleware(admission, gateway)
+middleware = warrantkit_middleware(admission, gateway, warrant_verifier=verifier)
 
 agent = create_agent(
     model,
@@ -79,6 +84,7 @@ The middleware derives the default capability from each tool name and can overri
 middleware = warrantkit_middleware(
     admission,
     gateway,
+    warrant_verifier=verifier,
     capabilities={"refund": "payments_refund"},
 )
 ```
@@ -87,13 +93,13 @@ Authority is checked before the LangChain tool handler is allowed to run. AgentC
 
 This path is synchronous in v1; async-native middleware execution is not claimed yet. In a local Python 3.11/Linux microbenchmark using an in-process no-op tool (50,000 measured calls per path), the native middleware hook measured about 230 µs median per call versus 201 µs for direct LangChain invocation, while the wrapper measured about 441 µs. Treat these as directional microbenchmark results, not production capacity claims; real tool latency, host load, and concurrent agents change the result. The reproducible script is `tools/benchmark_gateway_overhead.py`.
 
-For Ed25519 Warrant and receipt attestation, install the optional cryptographic dependency explicitly:
+The LangChain extra installs the Ed25519 dependency because protected LangChain calls require signed Warrants. For standalone Warrant/receipt attestation without LangChain, install:
 
 ```bash
 python -m pip install "warrantkit[attestation]"
 ```
 
-The base package and 30-second no-root demo do not require the attestation dependency.
+The base package and 30-second no-root demo do not require the attestation dependency. In production, load the signing key from a protected key-management boundary and configure the verifier with a separately trusted public key; do not generate a new ephemeral signing key per process restart.
 
 ## CrewAI integration
 
