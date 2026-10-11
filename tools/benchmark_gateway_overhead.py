@@ -189,24 +189,30 @@ def main() -> int:
     concurrent_results = {}
     for workers in concurrency:
         concurrent_engine = build_agentcontainment_engine(f"gateway-benchmark-{workers}")
+        concurrent_signer = Ed25519Signer.generate(f"gateway-benchmark-{workers}")
+        concurrent_verifier = Ed25519Verifier({concurrent_signer.key_id: concurrent_signer.public_key()})
         concurrent_admission = admit(
             Policy("benchmark", capabilities=("noop_tool",)),
             agent_id=f"gateway-benchmark-{workers}",
             engine=concurrent_engine,
             runtime_id=concurrent_engine.runtime_id,
+            warrant_signer=concurrent_signer,
         )
         wrapper_gateway = ActionGateway(PolicyEngine(), concurrent_engine.controller)
-        concurrent_protected = wrap_langchain_tool(noop_tool, concurrent_admission, wrapper_gateway)
+        concurrent_protected = wrap_langchain_tool(noop_tool, concurrent_admission, wrapper_gateway, warrant_verifier=concurrent_verifier)
 
         middleware_engine = build_agentcontainment_engine(f"gateway-middleware-benchmark-{workers}")
+        middleware_signer = Ed25519Signer.generate(f"gateway-middleware-benchmark-{workers}")
+        middleware_verifier = Ed25519Verifier({middleware_signer.key_id: middleware_signer.public_key()})
         middleware_admission = admit(
             Policy("benchmark", capabilities=("noop_tool",)),
             agent_id=f"gateway-middleware-benchmark-{workers}",
             engine=middleware_engine,
             runtime_id=middleware_engine.runtime_id,
+            warrant_signer=middleware_signer,
         )
         middleware_gateway = ActionGateway(PolicyEngine(), middleware_engine.controller)
-        concurrent_middleware = WarrantKitMiddleware(middleware_admission, middleware_gateway)
+        concurrent_middleware = WarrantKitMiddleware(middleware_admission, middleware_gateway, warrant_verifier=middleware_verifier)
 
         direct_concurrent = measure_concurrent(
             lambda _worker_id, i: noop_tool.invoke({"value": i}), args.calls, workers, args.warmup
