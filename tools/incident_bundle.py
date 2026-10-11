@@ -272,6 +272,21 @@ def write_incident_bundle(
     return manifest
 
 
+def _validate_manifest_claims(manifest: Mapping[str, Any]) -> None:
+    """Reject manifest claims that are not the exact contract validated below."""
+    expected = {
+        "authority_issued": True,
+        "runtime_epoch_advanced": True,
+        "external_containment_verified": True,
+        "terminal_runtime_observed": True,
+        "stale_authority_rejected": True,
+        "evidence_contract_validated": True,
+    }
+    claims = manifest.get("claims")
+    if not isinstance(claims, dict) or claims != expected:
+        raise ValueError("manifest claims do not match the validated evidence contract")
+
+
 def verify_incident_bundle(
     bundle_dir: Path,
     *,
@@ -311,6 +326,7 @@ def verify_incident_bundle(
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise ValueError(f"bundle record is not valid JSON: {name}") from exc
     _validate_evidence_contract(records, incident_id=manifest.get("incident_id"))
+    _validate_manifest_claims(manifest)
 
     key_record = json.loads((bundle_dir / "public-key.json").read_text(encoding="utf-8"))
     receipt = json.loads(
