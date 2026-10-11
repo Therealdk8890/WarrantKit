@@ -27,7 +27,7 @@ The default demo proves verifier rejection against runtime state in one Python p
 
 **The process that runs the agent must not hold credentials that let it perform protected side effects without the enforcement boundary.** Payment API keys, database credentials, cloud credentials, and equivalent secrets must be held by the trusted gateway/controller or by a downstream service that independently enforces the same authorization. If the agent can call the downstream API directly with its own unrestricted key, the gateway is advisory and WarrantKit cannot prevent that bypass. The proof runs the controller and verifier in the same Python process; controller isolation is a deployment/host-boundary requirement, not something this snippet demonstrates.
 
-WarrantKit's Warrant is a typed authority contract, not currently a bearer credential consumed directly by AgentContainment's ActionGateway. The gateway enforces controller-owned execution leases. A serialized or unsigned Warrant is not self-authenticating. Protected LangChain tool paths now fail closed unless the Warrant was signed at issuance and verified against a deployment-configured Ed25519 public-key anchor.
+WarrantKit's Warrant is a typed authority contract, not currently a bearer credential consumed directly by AgentContainment's ActionGateway. The gateway enforces controller-owned execution leases. A serialized or unsigned Warrant is not self-authenticating. Protected LangChain and CrewAI tool paths now fail closed unless the Warrant was signed at issuance and verified against a deployment-configured Ed25519 public-key anchor.
 
 ## What epoch fencing adds
 
