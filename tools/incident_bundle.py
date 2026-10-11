@@ -53,7 +53,7 @@ def _require_mapping(value: Any, name: str) -> Mapping[str, Any]:
     return value
 
 
-def _validate_evidence_contract(records: Mapping[str, Any]) -> None:
+def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str) -> None:
     """Validate minimum cross-record semantics, not just file hashes."""
     authority = _require_mapping(records.get("authority-issued.json"), "authority-issued.json")
     containment = _require_mapping(records.get("containment-event.json"), "containment-event.json")
@@ -74,6 +74,11 @@ def _validate_evidence_contract(records: Mapping[str, Any]) -> None:
         raise ValueError("runtime evidence execution identity is incomplete")
     if not isinstance(epoch, int) or isinstance(epoch, bool):
         raise ValueError("runtime evidence epoch must be an integer")
+
+    if not isinstance(incident_id, str) or not incident_id:
+        raise ValueError("manifest incident_id must be a non-empty string")
+    if containment.get("incident_id") != incident_id:
+        raise ValueError("containment incident identity does not match bundle manifest")
 
     before = containment.get("epoch_before")
     after = containment.get("epoch_after")
@@ -108,6 +113,15 @@ def _validate_evidence_contract(records: Mapping[str, Any]) -> None:
     if authority_runtime.get("epoch") != before:
         raise ValueError("issued authority epoch does not match containment's pre-transition epoch")
 
+    sequences = [event.get("sequence") for event in events]
+    if any(not isinstance(value, int) or isinstance(value, bool) for value in sequences):
+        raise ValueError("runtime evidence event sequence values must be integers")
+    if sequences != sorted(sequences) or len(set(sequences)) != len(sequences):
+        raise ValueError("runtime evidence event sequence must be strictly increasing")
+    for event_name in ("containment_verified", "stale_authority_rejected"):
+        matching = [event for event in events if event.get("name") == event_name]
+        if len(matching) != 1:
+            raise ValueError(f"runtime evidence must contain exactly one {event_name} event")
     by_name = {event.get("name"): event for event in events}
     for event_name in ("containment_verified", "stale_authority_rejected"):
         event = by_name.get(event_name)
@@ -131,7 +145,9 @@ def _validate_evidence_contract(records: Mapping[str, Any]) -> None:
     if provenance.get("runtime_verifier_result") != "VERIFIED":
         raise ValueError("provenance does not record successful runtime evidence verification")
     source_digest = provenance.get("runtime_evidence_sha256")
-    if source_digest is not None and source_digest != "sha256:" + hashlib.sha256(
+    if not isinstance(source_digest, str) or not source_digest:
+        raise ValueError("provenance is missing the runtime evidence digest")
+    if source_digest != "sha256:" + hashlib.sha256(
         (json.dumps(evidence, indent=2, sort_keys=True) + "\n").encode("utf-8")
     ).hexdigest():
         raise ValueError("provenance runtime evidence digest does not match bundled evidence")
@@ -166,7 +182,7 @@ def write_incident_bundle(
         "external-proof.json": dict(external_proof),
         "provenance.json": dict(provenance),
     }
-    _validate_evidence_contract(records)
+    _validate_evidence_contract(records, incident_id=incident_id)
     for name, value in records.items():
         _write_json(output_dir / name, value)
 
@@ -281,7 +297,7 @@ def verify_incident_bundle(
                 records[name] = json.loads(path.read_text(encoding="utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise ValueError(f"bundle record is not valid JSON: {name}") from exc
-    _validate_evidence_contract(records)
+    _validate_evidence_contract(records, incident_id=manifest.get("incident_id"))
 
     key_record = json.loads((bundle_dir / "public-key.json").read_text(encoding="utf-8"))
     receipt = json.loads(

@@ -149,6 +149,44 @@ def test_incident_bundle_rejects_cross_execution_evidence(tmp_path: Path) -> Non
         )
 
 
+def test_incident_bundle_rejects_mismatched_incident_id(tmp_path: Path) -> None:
+    bundle = tmp_path / "incident"
+    records = _valid_records()
+    records["containment"]["incident_id"] = "INC-other"
+    with pytest.raises(ValueError, match="containment incident identity"):
+        write_incident_bundle(
+            bundle, incident_id=records["incident_id"], authority=records["authority"],
+            containment=records["containment"], runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"], provenance=records["provenance"],
+        )
+
+
+def test_incident_bundle_rejects_duplicate_required_events(tmp_path: Path) -> None:
+    bundle = tmp_path / "incident"
+    records = _valid_records()
+    records["runtime_evidence"]["events"].append(
+        dict(records["runtime_evidence"]["events"][0], sequence=3)
+    )
+    with pytest.raises(ValueError, match="exactly one containment_verified"):
+        write_incident_bundle(
+            bundle, incident_id=records["incident_id"], authority=records["authority"],
+            containment=records["containment"], runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"], provenance=records["provenance"],
+        )
+
+
+def test_incident_bundle_requires_runtime_evidence_digest(tmp_path: Path) -> None:
+    bundle = tmp_path / "incident"
+    records = _valid_records()
+    records["provenance"].pop("runtime_evidence_sha256")
+    with pytest.raises(ValueError, match="missing the runtime evidence digest"):
+        write_incident_bundle(
+            bundle, incident_id=records["incident_id"], authority=records["authority"],
+            containment=records["containment"], runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"], provenance=records["provenance"],
+        )
+
+
 def test_incident_bundle_supports_external_trust_anchor(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     bundle = tmp_path / "incident"
     key = Ed25519PrivateKey.generate()
