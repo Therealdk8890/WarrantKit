@@ -119,7 +119,7 @@ def test_recontainment_requires_prior_containment() -> None:
     assert admission.identity.epoch == 0
 
 
-def test_langchain_wrapper_rejects_replaced_admission_warrant(tmp_path=None) -> None:
+def test_langchain_wrapper_rejects_replaced_admission_warrant() -> None:
     pytest.importorskip("langchain_core")
     from langchain_core.tools import tool
     from agentcontain.warrant import WarrantAuthority
