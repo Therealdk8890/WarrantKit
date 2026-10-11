@@ -1,3 +1,4 @@
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 import pytest
 
 from agentcontain import Policy, admit, build_agentcontainment_engine, contain
@@ -21,14 +22,17 @@ class _Request:
 
 def _middleware(agent_id: str, capabilities: tuple[str, ...]):
     engine = build_agentcontainment_engine(agent_id)
+    signer = Ed25519Signer.generate("middleware-test")
     admission = admit(
         Policy("payments", capabilities=capabilities),
         agent_id=agent_id,
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
-    return WarrantKitMiddleware(admission, gateway), admission
+    verifier = Ed25519Verifier({signer.key_id: signer.public_key()})
+    return WarrantKitMiddleware(admission, gateway, warrant_verifier=verifier), admission
 
 
 def test_native_middleware_runs_handler_with_matching_capability() -> None:
