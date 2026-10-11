@@ -388,7 +388,7 @@ sudo -E "$(command -v python)" tools/run_real_kill_demo.py
 
 An auditor can then verify with the public key obtained independently from that deployment trust anchor. To derive the raw Ed25519 public key from the deployment PEM file, run this on the key-owning system (the private key is read locally and never printed):
 
-\`\`\`bash
+```bash
 python - /secure/incident-signing-key.pem <<'PY'
 import base64
 import sys
@@ -405,15 +405,15 @@ public_key = private_key.public_key().public_bytes(
 )
 print(base64.b64encode(public_key).decode("ascii"))
 PY
-\`\`\`
+```
 
 Transfer the resulting public-key value to the auditor through a channel independent of the incident bundle (for example, approved key management or configuration). Do **not** trust a public key merely because it is inside the bundle being checked. Then verify:
 
-\`\`\`bash
+```bash
 python tools/verify_incident_bundle.py ./incident-bundle --trusted-public-key "<base64-ed25519-public-key-from-trusted-channel>"
-\`\`\`
+```
 
-The verifier reports \`authenticity=trusted-anchor\` only when the supplied key matches the bundle's signing key and the receipt verifies. Without \`--trusted-public-key\`, \`authenticity=bundle-key-integrity-only\` means the bundle is internally consistent; it does not establish who created it. The default demo key is **not** an organizational trust anchor. Neither verification mode establishes that an agent claim is true or that the tested Linux boundary provides universal host isolation.
+The verifier reports `authenticity=trusted-anchor` only when the supplied key matches the bundle's signing key and the receipt verifies. Without `--trusted-public-key`, `authenticity=bundle-key-integrity-only` means the bundle is internally consistent; it does not establish who created it. The default demo key is **not** an organizational trust anchor. Neither verification mode establishes that an agent claim is true or that the tested Linux boundary provides universal host isolation.
 
 ## Evidence and verification
 
