@@ -245,23 +245,32 @@ def main() -> int:
             build_agentcontainment_engine(f"gateway-isolated-wrapper-{workers}-{worker_id}")
             for worker_id in range(workers)
         ]
+        isolated_wrapper_signers = [
+            Ed25519Signer.generate(f"gateway-isolated-wrapper-{workers}-{worker_id}")
+            for worker_id in range(workers)
+        ]
+        isolated_wrapper_verifiers = [
+            Ed25519Verifier({signer.key_id: signer.public_key()})
+            for signer in isolated_wrapper_signers
+        ]
         isolated_wrapper_admissions = [
             admit(
                 Policy("benchmark", capabilities=("noop_tool",)),
                 agent_id=f"gateway-isolated-wrapper-{workers}-{worker_id}",
                 engine=worker_engine,
                 runtime_id=worker_engine.runtime_id,
+                warrant_signer=signer,
             )
-            for worker_id, worker_engine in enumerate(isolated_wrapper_engines)
+            for worker_id, (worker_engine, signer) in enumerate(zip(isolated_wrapper_engines, isolated_wrapper_signers))
         ]
         isolated_wrapper_gateways = [
             ActionGateway(PolicyEngine(), worker_engine.controller)
             for worker_engine in isolated_wrapper_engines
         ]
         isolated_protected_tools = [
-            wrap_langchain_tool(noop_tool, worker_admission, worker_gateway)
-            for worker_admission, worker_gateway in zip(
-                isolated_wrapper_admissions, isolated_wrapper_gateways
+            wrap_langchain_tool(noop_tool, worker_admission, worker_gateway, warrant_verifier=verifier)
+            for worker_admission, worker_gateway, verifier in zip(
+                isolated_wrapper_admissions, isolated_wrapper_gateways, isolated_wrapper_verifiers
             )
         ]
 
@@ -269,23 +278,32 @@ def main() -> int:
             build_agentcontainment_engine(f"gateway-isolated-middleware-{workers}-{worker_id}")
             for worker_id in range(workers)
         ]
+        isolated_middleware_signers = [
+            Ed25519Signer.generate(f"gateway-isolated-middleware-{workers}-{worker_id}")
+            for worker_id in range(workers)
+        ]
+        isolated_middleware_verifiers = [
+            Ed25519Verifier({signer.key_id: signer.public_key()})
+            for signer in isolated_middleware_signers
+        ]
         isolated_middleware_admissions = [
             admit(
                 Policy("benchmark", capabilities=("noop_tool",)),
                 agent_id=f"gateway-isolated-middleware-{workers}-{worker_id}",
                 engine=worker_engine,
                 runtime_id=worker_engine.runtime_id,
+                warrant_signer=signer,
             )
-            for worker_id, worker_engine in enumerate(isolated_middleware_engines)
+            for worker_id, (worker_engine, signer) in enumerate(zip(isolated_middleware_engines, isolated_middleware_signers))
         ]
         isolated_middleware_gateways = [
             ActionGateway(PolicyEngine(), worker_engine.controller)
             for worker_engine in isolated_middleware_engines
         ]
         isolated_middlewares = [
-            WarrantKitMiddleware(worker_admission, worker_gateway)
-            for worker_admission, worker_gateway in zip(
-                isolated_middleware_admissions, isolated_middleware_gateways
+            WarrantKitMiddleware(worker_admission, worker_gateway, warrant_verifier=verifier)
+            for worker_admission, worker_gateway, verifier in zip(
+                isolated_middleware_admissions, isolated_middleware_gateways, isolated_middleware_verifiers
             )
         ]
 
