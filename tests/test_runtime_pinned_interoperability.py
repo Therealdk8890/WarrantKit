@@ -82,7 +82,8 @@ def test_real_agentcontainment_evidence_round_trips_through_warrantkit(agent_con
         observation = RuntimeObservationSource().observe(runtime)
         envelope = runtime_pinned_evidence(admission, observation=observation)
 
-        assert envelope.verification["status"] == "verified"
+        # Runtime binding consistency is not producer authentication.
+        assert envelope.verification["status"] == "observed"
         binding = envelope.proof["runtime_binding"]
         assert binding["runtime_id"] == runtime.runtime_id
         assert binding["agent_id"] == agent_id
