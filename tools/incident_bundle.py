@@ -89,7 +89,7 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
     if containment.get("operation") != "external_containment" or containment.get("external_verified") is not True:
         raise ValueError("containment record does not establish externally verified containment")
     for name, record in (("containment", containment), ("external proof", external)):
-        if record.get("execution_id", execution_id) != execution_id:
+        if record.get("execution_id") != execution_id:
             raise ValueError(f"{name} execution identity does not match runtime evidence")
         if record.get("runtime_id") != runtime_id or record.get("agent_id") != agent_id:
             raise ValueError(f"{name} runtime identity does not match runtime evidence")
@@ -109,9 +109,22 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
     if not isinstance(exit_code, int) or isinstance(exit_code, bool):
         raise ValueError("external proof workload exit code must be an integer")
 
+    authority_subject = _require_mapping(authority.get("subject"), "authority subject")
+    authority_policy = _require_mapping(authority.get("authority"), "authority policy")
     authority_runtime = _require_mapping(authority.get("runtime"), "authority runtime")
+    authority_lifecycle = _require_mapping(authority.get("lifecycle"), "authority lifecycle")
+    if authority.get("schema_version") != "warrantkit.warrant/v1":
+        raise ValueError("issued authority has an unsupported Warrant schema")
+    if authority_subject.get("execution_id") != execution_id or authority_subject.get("agent_id") != agent_id:
+        raise ValueError("issued authority subject does not match runtime evidence execution")
+    if authority_policy.get("policy_id") != execution.get("policy_id") or authority_policy.get("policy_digest") != execution.get("policy_digest"):
+        raise ValueError("issued authority policy does not match runtime evidence execution")
+    if authority_runtime.get("runtime_id") != runtime_id:
+        raise ValueError("issued authority runtime does not match runtime evidence execution")
     if authority_runtime.get("epoch") != before:
         raise ValueError("issued authority epoch does not match containment's pre-transition epoch")
+    if authority_lifecycle.get("state") != "active" or authority_lifecycle.get("revoked_at") is not None:
+        raise ValueError("issued authority must be the active, unrevoked pre-containment Warrant")
 
     sequences = [event.get("sequence") for event in events]
     if any(not isinstance(value, int) or isinstance(value, bool) for value in sequences):
@@ -259,6 +272,21 @@ def write_incident_bundle(
     return manifest
 
 
+def _validate_manifest_claims(manifest: Mapping[str, Any]) -> None:
+    """Reject manifest claims that are not the exact contract validated below."""
+    expected = {
+        "authority_issued": True,
+        "runtime_epoch_advanced": True,
+        "external_containment_verified": True,
+        "terminal_runtime_observed": True,
+        "stale_authority_rejected": True,
+        "evidence_contract_validated": True,
+    }
+    claims = manifest.get("claims")
+    if not isinstance(claims, dict) or claims != expected:
+        raise ValueError("manifest claims do not match the validated evidence contract")
+
+
 def verify_incident_bundle(
     bundle_dir: Path,
     *,
@@ -298,6 +326,7 @@ def verify_incident_bundle(
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 raise ValueError(f"bundle record is not valid JSON: {name}") from exc
     _validate_evidence_contract(records, incident_id=manifest.get("incident_id"))
+    _validate_manifest_claims(manifest)
 
     key_record = json.loads((bundle_dir / "public-key.json").read_text(encoding="utf-8"))
     receipt = json.loads(
