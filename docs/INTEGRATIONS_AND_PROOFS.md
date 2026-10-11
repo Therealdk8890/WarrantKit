@@ -20,6 +20,7 @@ from langchain_core.tools import tool
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from agentcontain.integrations.langchain import wrap_langchain_tool
 
 @tool
@@ -28,11 +29,14 @@ def payments_refund(amount: int) -> str:
     return f"refunded:{amount}"
 
 engine = build_agentcontainment_engine("payments-agent")
+signer = Ed25519Signer.generate("payments-issuer")  # load a persistent private key in production
+verifier = Ed25519Verifier({signer.key_id: signer.public_key()})  # public key is a trusted deployment anchor
 admission = admit(
     Policy("payments", capabilities=("payments_refund",)),
     agent_id="payments-agent",
     engine=engine,
     runtime_id=engine.runtime_id,
+    warrant_signer=signer,
 )
 
 gateway = ActionGateway(PolicyEngine(), engine.controller)
@@ -40,6 +44,7 @@ protected_refund = wrap_langchain_tool(
     payments_refund,
     admission,
     gateway,
+    warrant_verifier=verifier,
 )
 
 agent = create_agent(model, tools=[protected_refund])
@@ -64,7 +69,7 @@ Use the middleware when you want one controller-owned authority boundary around 
 from langchain.agents import create_agent
 from agentcontain.integrations.langchain_middleware import warrantkit_middleware
 
-middleware = warrantkit_middleware(admission, gateway)
+middleware = warrantkit_middleware(admission, gateway, warrant_verifier=verifier)
 
 agent = create_agent(
     model,
@@ -83,7 +88,7 @@ The adapter and ActionGateway enforce related but distinct objects:
 
 The intended protected path requires both checks. The Warrant check must reject stale authority before the tool handler reaches the gateway, while the gateway remains the final enforcement point. The framework proof demonstrates this path by asserting that the first side effect executes before containment and that a retained pre-containment Warrant cannot reach the second side effect afterward. This is not a claim that the Warrant and lease are the same object.
 
-**Signature limitation:** Warrant objects are unsigned by default, and this adapter path does not automatically require an Ed25519 attestation envelope. The field/epoch verifier establishes consistency with the runtime state it reads; by itself it does not establish who issued a Warrant. If an attacker can forge and submit an object with matching fields, epoch fencing alone does not establish issuer authenticity. Ed25519 artifact-attestation primitives are available, but they must be explicitly integrated and checked against a trusted key before they can provide that guarantee.
+**Issuer-authentication boundary:** Protected LangChain wrapper, middleware, and CrewAI adapter paths require an Ed25519-signed Warrant and verify it against a deployment-configured trusted public key before the tool handler runs. This authenticates the signed Warrant payload; it does not make the Warrant a bearer credential consumed by ActionGateway. The gateway's controller-owned execution lease remains the final enforcement point. Production deployments must keep the private signing key outside the agent process and provision the public trust anchor independently.
 
 **Epoch-fencing cost:** advancing the runtime epoch invalidates every Warrant bound to the previous epoch, not just the Warrant associated with the triggering action. This coarse-grained invalidation avoids maintaining a per-Warrant revocation list, but legitimate work bound to the old epoch must obtain fresh authority before continuing.
 
@@ -93,6 +98,7 @@ The middleware derives the default capability from each tool name and can overri
 middleware = warrantkit_middleware(
     admission,
     gateway,
+    warrant_verifier=verifier,
     capabilities={"refund": "payments_refund"},
 )
 ```
@@ -123,14 +129,18 @@ Then wrap an existing CrewAI tool:
 from agent_containment.gateway import ActionGateway
 from agent_containment.policy import PolicyEngine
 from agentcontain import Policy, admit, build_agentcontainment_engine
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from agentcontain.integrations.crewai import wrap_crewai_tool
 
 engine = build_agentcontainment_engine("payments-agent")
+signer = Ed25519Signer.generate("payments-issuer")  # load a persistent private key in production
+verifier = Ed25519Verifier({signer.key_id: signer.public_key()})  # public key is a trusted deployment anchor
 admission = admit(
     Policy("payments", capabilities=("payments_refund",)),
     agent_id="payments-agent",
     engine=engine,
     runtime_id=engine.runtime_id,
+    warrant_signer=signer,
 )
 
 gateway = ActionGateway(PolicyEngine(), engine.controller)
@@ -138,12 +148,13 @@ protected_refund = wrap_crewai_tool(
     payments_refund_tool,
     admission,
     gateway,
+    warrant_verifier=verifier,
 )
 
 agent = Agent(..., tools=[protected_refund])
 ~~~
 
-The adapter verifies the current Warrant and required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
+The adapter verifies the signed Warrant against the configured trusted Ed25519 public key, confirms it matches the active Warrant and current runtime epoch, and checks the required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
 
 ## Egress enforcement limitation
 

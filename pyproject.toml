@@ -27,9 +27,11 @@ include = ["agentcontain*"]
 [project.optional-dependencies]
 langchain = [
     "langchain>=1.0,<2",
+    "cryptography>=42",
 ]
 crewai = [
     "crewai>=1.15,<2",
+    "cryptography>=42",
 ]
 attestation = [
     "cryptography>=42",
