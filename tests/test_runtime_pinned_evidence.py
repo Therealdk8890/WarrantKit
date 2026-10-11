@@ -60,7 +60,7 @@ def _binding(*, epoch=1, runtime_id="runtime-1", action="KILL", state="TERMINATE
     }
 
 
-def test_runtime_pinned_second_evidence_verifies_exact_epoch():
+def test_runtime_pinned_binding_checks_structure_without_claiming_authenticity():
     admission = _admission()
     contain(admission)
     envelope = EvidenceEnvelope.from_execution(
@@ -78,7 +78,7 @@ def test_runtime_pinned_second_evidence_verifies_exact_epoch():
 
     bound = envelope.with_runtime_pinned_evidence(_binding())
 
-    assert bound.verification["status"] == "verified"
+    assert bound.verification["status"] == "observed"
     assert bound.proof["runtime_binding"]["runtime_id"] == "runtime-1"
     assert bound.proof["runtime_binding"]["epoch"] == 1
 
@@ -229,7 +229,7 @@ def test_numeric_runtime_observation_timestamp_is_accepted():
         events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
     ).with_runtime_pinned_evidence(binding)
 
-    assert envelope.verification["status"] == "verified"
+    assert envelope.verification["status"] == "observed"
     assert envelope.proof["runtime_binding"]["observation"]["observed_at"] == 1790790002.0
 
 
