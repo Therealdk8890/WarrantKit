@@ -230,6 +230,7 @@ def main() -> int:
                 runtime_evidence=envelope.to_dict(),
                 external_proof={
                     "schema_version": "warrantkit.external-proof/v1",
+                    "execution_id": admission.identity.execution_id,
                     "runtime_id": runtime_id,
                     "agent_id": admission.identity.agent_id,
                     "epoch": admission.identity.epoch,
