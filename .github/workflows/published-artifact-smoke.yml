@@ -1,0 +1,65 @@
+name: Published package smoke test
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 8 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  published-artifacts:
+    name: PyPI install and authority-boundary proof
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out proof harness only
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create isolated environment
+        run: |
+          python -m venv "$RUNNER_TEMP/warrantkit-published"
+          echo "$RUNNER_TEMP/warrantkit-published/bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/warrantkit-published/bin/python" -m pip install --upgrade pip
+
+      - name: Install published packages from PyPI
+        run: python -m pip install "warrantkit[langchain]"
+
+      - name: Record versions and reject workspace imports
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: |
+          python - <<'PY'
+          import importlib
+          import importlib.metadata
+          import os
+          from pathlib import Path
+
+          workspace = Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          for distribution in ("warrantkit", "agentcontainment", "langchain"):
+              print(f"{distribution}=={importlib.metadata.version(distribution)}")
+
+          for module_name in ("agentcontain", "agent_containment"):
+              module = importlib.import_module(module_name)
+              module_path = Path(module.__file__).resolve()
+              print(f"{module_name} imported from {module_path}")
+              if module_path.is_relative_to(workspace):
+                  raise SystemExit(
+                      f"{module_name} unexpectedly imported from checkout, not the installed distribution"
+                  )
+          PY
+
+      - name: Run published WarrantKit no-root demo
+        working-directory: ${{ runner.temp }}
+        run: warrantkit demo
+
+      - name: Run framework authority-boundary proof against installed packages
+        working-directory: ${{ runner.temp }}
+        env:
+          GITHUB_WORKSPACE: ${{ github.workspace }}
+        run: python "$GITHUB_WORKSPACE/tools/run_authority_boundary_demo.py"
