@@ -13,9 +13,9 @@
   ],
   "enforcement": {"complete": true},
   "verification": {
-    "method": "runtime-pinned-second-evidence",
+    "method": "runtime-pinned-structural-consistency",
     "scope": "external-runtime-enforcement",
-    "status": "verified"
+    "status": "observed"
   },
   "proof": {
     "runtime_binding": {
