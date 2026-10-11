@@ -1,3 +1,4 @@
+from agentcontain.attestation import Ed25519Signer, Ed25519Verifier
 from dataclasses import replace
 import pytest
 
@@ -16,11 +17,13 @@ def test_langchain_tool_runs_only_with_matching_warrant_capability() -> None:
         return f"refunded:{amount}"
 
     engine = build_agentcontainment_engine("agent-langchain")
+    signer = Ed25519Signer.generate("langchain-test")
     admission = admit(
         Policy("payments", capabilities=("payments_refund",)),
         agent_id="agent-langchain",
         engine=engine,
         runtime_id=engine.runtime_id,
+        warrant_signer=signer,
     )
     gateway = ActionGateway(PolicyEngine(), engine.controller)
     protected = __import__(
@@ -30,6 +33,7 @@ def test_langchain_tool_runs_only_with_matching_warrant_capability() -> None:
         payments_refund,
         admission,
         gateway,
+        warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}),
     )
 
     assert protected.invoke({"amount": 25}) == "refunded:25"
@@ -59,7 +63,7 @@ def test_langchain_tool_rejects_after_runtime_containment() -> None:
         "agentcontain.integrations.langchain",
         fromlist=["wrap_langchain_tool", "LangChainWarrantError"],
     )
-    wrapped = protected.wrap_langchain_tool(consequential_write, admission, gateway)
+    wrapped = protected.wrap_langchain_tool(consequential_write, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     contain(admission)
 
@@ -93,7 +97,7 @@ def test_langchain_tool_rejects_missing_capability_before_side_effect() -> None:
         "agentcontain.integrations.langchain",
         fromlist=["wrap_langchain_tool", "LangChainWarrantError"],
     )
-    wrapped = integration.wrap_langchain_tool(production_write, admission, gateway)
+    wrapped = integration.wrap_langchain_tool(production_write, admission, gateway, warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}))
 
     with pytest.raises(integration.LangChainWarrantError):
         wrapped.invoke({"value": "must-not-run"})
