@@ -29,6 +29,8 @@ def main() -> int:
 
     print("[1/5] admitting a tool-using execution under a Warrant")
     engine = build_agentcontainment_engine("authority-demo")
+    signer = Ed25519Signer.generate("authority-boundary-demo")
+    verifier = Ed25519Verifier({signer.key_id: signer.public_key()})
     admission = admit(
         Policy("payments", capabilities=("payments_refund",)),
         agent_id="authority-demo",
