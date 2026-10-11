@@ -142,8 +142,8 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
 
     if provenance.get("execution_id") != execution_id:
         raise ValueError("provenance execution identity does not match runtime evidence")
-    if provenance.get("runtime_verifier_result") != "VERIFIED":
-        raise ValueError("provenance does not record successful runtime evidence verification")
+    if provenance.get("runtime_verifier_result") != "OBSERVED":
+        raise ValueError("provenance does not record successful structural runtime evidence validation")
     source_digest = provenance.get("runtime_evidence_sha256")
     if not isinstance(source_digest, str) or not source_digest:
         raise ValueError("provenance is missing the runtime evidence digest")
@@ -235,13 +235,13 @@ def write_incident_bundle(
             "external_containment_verified": True,
             "terminal_runtime_observed": True,
             "stale_authority_rejected": True,
-            "evidence_independently_verified": True,
+            "evidence_contract_validated": True,
         },
         "files": files,
         "limitations": [
             "This bundle describes the captured proof and its evidence.",
             "The embedded demo public key is not an external trust anchor.",
-            "Verified evidence does not establish that an agent claim is true.",
+            "Runtime evidence status OBSERVED establishes structural consistency, not producer authenticity or truth.",
             "The proof does not establish universal host isolation or formal verification.",
         ],
     }
