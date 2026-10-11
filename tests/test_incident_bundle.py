@@ -23,6 +23,8 @@ def test_incident_bundle_round_trip(tmp_path: Path) -> None:
     result = verify_incident_bundle(bundle)
     assert result["status"] == "VERIFIED"
     assert result["incident_id"] == "INC-test"
+    # A key carried by the same bundle proves internal integrity only.
+    assert result["authenticity"] == "bundle-key-integrity-only"
     assert manifest["incident_id"] == "INC-test"
 
 
@@ -83,3 +85,13 @@ def test_incident_bundle_supports_external_trust_anchor(tmp_path: Path, monkeypa
         trusted_public_key_b64=public_key,
     )
     assert result["authenticity"] == "trusted-anchor"
+
+    untrusted_key = Ed25519PrivateKey.generate().public_key().public_bytes(
+        serialization.Encoding.Raw,
+        serialization.PublicFormat.Raw,
+    )
+    with pytest.raises(ValueError, match="trusted public key does not match bundle key"):
+        verify_incident_bundle(
+            bundle,
+            trusted_public_key_b64=base64.b64encode(untrusted_key).decode("ascii"),
+        )
