@@ -73,6 +73,20 @@ agent = create_agent(
 )
 ```
 
+### Authority check versus runtime enforcement
+
+The adapter and ActionGateway enforce related but distinct objects:
+
+1. The adapter verifies the Warrant's execution identity, policy binding, validity, capabilities, and epoch against the current controller runtime.
+2. The adapter submits the action through AgentContainment's ActionGateway.
+3. The gateway's final runtime enforcement uses controller-owned execution leases; it does not consume the serialized Warrant as a bearer credential.
+
+The intended protected path requires both checks. The Warrant check must reject stale authority before the tool handler reaches the gateway, while the gateway remains the final enforcement point. The framework proof demonstrates this path by asserting that the first side effect executes before containment and that a retained pre-containment Warrant cannot reach the second side effect afterward. This is not a claim that the Warrant and lease are the same object.
+
+**Signature limitation:** Warrant objects are unsigned by default, and this adapter path does not automatically require an Ed25519 attestation envelope. The field/epoch verifier establishes consistency with the runtime state it reads; by itself it does not establish who issued a Warrant. If an attacker can forge and submit an object with matching fields, epoch fencing alone does not establish issuer authenticity. Ed25519 artifact-attestation primitives are available, but they must be explicitly integrated and checked against a trusted key before they can provide that guarantee.
+
+**Epoch-fencing cost:** advancing the runtime epoch invalidates every Warrant bound to the previous epoch, not just the Warrant associated with the triggering action. This coarse-grained invalidation avoids maintaining a per-Warrant revocation list, but legitimate work bound to the old epoch must obtain fresh authority before continuing.
+
 The middleware derives the default capability from each tool name and can override that mapping explicitly:
 
 ```python
