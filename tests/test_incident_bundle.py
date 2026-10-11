@@ -303,3 +303,29 @@ def test_incident_bundle_requires_external_proof_execution_id(tmp_path: Path) ->
             external_proof=records["external_proof"],
             provenance=records["provenance"],
         )
+
+
+def test_incident_bundle_rejects_manifest_claims_not_supported_by_contract(tmp_path: Path) -> None:
+    bundle = tmp_path / "incident"
+    _write_valid_bundle(bundle)
+
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["claims"]["external_containment_verified"] = False
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest claims do not match the validated evidence contract"):
+        verify_incident_bundle(bundle)
+
+
+def test_incident_bundle_rejects_unknown_manifest_claims(tmp_path: Path) -> None:
+    bundle = tmp_path / "incident"
+    _write_valid_bundle(bundle)
+
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["claims"]["agent_intent_verified"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest claims do not match the validated evidence contract"):
+        verify_incident_bundle(bundle)
