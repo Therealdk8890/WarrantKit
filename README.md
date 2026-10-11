@@ -10,11 +10,15 @@ WarrantKit is the entry point for this authority contract. It uses [AgentContain
 
 ## First proof: replay a stale Warrant (no root, no submodule)
 
-Install the published package:
+Use the repository version for this proof because the published PyPI README/package can lag the current source:
 
 ```bash
-python -m pip install warrantkit
+git clone https://github.com/Therealdk8890/WarrantKit.git
+cd WarrantKit
+python -m pip install -e .
 ```
+
+This plain clone does not fetch the AgentContainment submodule. The package dependency is installed through Python packaging; the verifier-only demo does not need the submodule, LangChain, root privileges, or cgroup v2.
 
 Then run this small verifier-level attack. It serializes a valid Warrant at epoch 0, verifies it, advances the current runtime epoch to 1, and tries the same serialized Warrant again:
 
