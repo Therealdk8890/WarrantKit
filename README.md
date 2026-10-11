@@ -135,6 +135,31 @@ Today the Warrant is a typed, transport-neutral authority object rather than a c
 
 Evidence never grants authority. Verification does not prove an external claim is true.
 
+### Trust boundary: who checks the authority?
+
+A Warrant is not useful merely because an agent possesses a serialized object. The enforcement point must check authority before an action reaches the protected side effect.
+
+In the current implementation, the split is explicit:
+
+- **WarrantKit** validates Warrant authority at admission and recovery boundaries against the exact execution, policy, runtime, epoch, and validity window.
+- **AgentContainment's ActionGateway** is the runtime action enforcement point. It evaluates each action and executes it only through a controller-owned execution lease; containment invalidates that lease before a later side effect can run.
+- **The Warrant is not currently a bearer credential accepted directly by ActionGateway.** A replayed serialized Warrant therefore cannot, by itself, invoke a tool, write a production database, or call a payments API. The gateway consumes runtime-owned execution authority.
+
+That distinction matters. If a future integration makes serialized Warrants directly consumable by an action gateway, it must authenticate issuance as well as check epoch. The current core does not maintain a durable Warrant issuance registry, so an arbitrary unsigned serialized Warrant must not be treated as self-authenticating. The shipped Ed25519 attestation layer can authenticate a Warrant when a deployment establishes a trusted public-key anchor.
+
+### Epoch fencing versus short-lived credentials
+
+A short-lived credential gives a time-based upper bound on stale authority. Epoch fencing gives an event-based invalidation boundary.
+
+For example, a Warrant with a 30-second TTL can remain usable for the rest of that 30-second window after containment unless the downstream system also maintains revocation state. An epoch-bound authority can become invalid immediately when containment advances the runtime epoch, without waiting for the TTL to expire.
+
+Epochs therefore do not replace expiry. They solve a different problem: **immediate invalidation tied to a security event rather than to the clock.**
+
+### Trust questions
+
+- **Why not Macaroons/Biscuit?** Those are general-purpose capability/bearer-token designs. WarrantKit's distinctive contract is the binding of runtime authority to execution identity and runtime epoch; Ed25519 is available when cryptographic attestation of the object is required.
+- **What does VERIFIED mean?** Only that the defined verification procedure and required evidence checks succeeded; it is not a truth oracle.
+
 ## LangChain integration
 
 WarrantKit can wrap an existing LangChain tool so the model-facing tool schema stays unchanged while execution crosses the Warrant and AgentContainment boundaries.
@@ -263,50 +288,6 @@ agent = Agent(..., tools=[protected_refund])
 ~~~
 
 The adapter verifies the current Warrant and required capability before the tool reaches the AgentContainment ActionGateway. If containment advances the runtime epoch, a retained pre-containment authority is rejected before the underlying CrewAI tool runs. This first adapter deliberately covers the synchronous BaseTool.run() path; async-native execution is not claimed yet.
-
-## What is a Warrant?
-
-A **Warrant** is WarrantKit's portable authority contract for one execution. It binds execution identity, accepted policy identity and digest, runtime identity and epoch, validity/revocation state, capabilities, constraints, and required evidence.
-
-Today the Warrant is a typed, transport-neutral authority object rather than the credential that the runtime ActionGateway consumes directly. WarrantKit verifies it against the exact execution, policy, runtime, epoch, and validity window at authority boundaries. AgentContainment's controller and ActionGateway remain the runtime enforcement boundary, using controller-owned execution leases that are invalidated by runtime state changes. Ed25519 signing/verification is shipped as an optional attestation layer; it does not make a signed Warrant authoritative by itself.
-
-A Warrant answers:
-
-> **Under exactly what authority was this execution admitted?**
-
-It does not establish that an action was safe, that agent intent was correct, or that an external claim is true.
-
-**Warrant = authority.**  
-**Evidence = what was observed or produced.**  
-**Verification = whether defined evidence checks succeeded.**  
-**Receipt = an authenticated record of evidence.**
-
-Evidence never grants authority, and a Warrant is never derived from evidence.
-
-### Trust boundary: who checks the authority?
-
-A Warrant is not useful merely because an agent possesses a serialized object. The enforcement point must check authority before an action reaches the protected side effect.
-
-In the current implementation, the split is explicit:
-
-- **WarrantKit** validates Warrant authority at admission and recovery boundaries against the exact execution, policy, runtime, epoch, and validity window.
-- **AgentContainment's ActionGateway** is the runtime action enforcement point. It evaluates each action and executes it only through a controller-owned execution lease; containment invalidates that lease before a later side effect can run.
-- **The Warrant is not currently a bearer credential accepted directly by ActionGateway.** A replayed serialized Warrant therefore cannot, by itself, invoke a tool, write a production database, or call a payments API. The gateway consumes runtime-owned execution authority.
-
-That distinction matters. If a future integration makes serialized Warrants directly consumable by an action gateway, it must authenticate issuance as well as check epoch. The current core does not maintain a durable Warrant issuance registry, so an arbitrary unsigned serialized Warrant must not be treated as self-authenticating. The shipped Ed25519 attestation layer can authenticate a Warrant when a deployment establishes a trusted public-key anchor.
-
-### Epoch fencing versus short-lived credentials
-
-A short-lived credential gives a time-based upper bound on stale authority. Epoch fencing gives an event-based invalidation boundary.
-
-For example, a Warrant with a 30-second TTL can remain usable for the rest of that 30-second window after containment unless the downstream system also maintains revocation state. An epoch-bound authority can become invalid immediately when containment advances the runtime epoch, without waiting for the TTL to expire.
-
-Epochs therefore do not replace expiry. They solve a different problem: **immediate invalidation tied to a security event rather than to the clock.**
-
-### Trust questions
-
-- **Why not Macaroons/Biscuit?** Those are general-purpose capability/bearer-token designs. WarrantKit's distinctive contract is the binding of runtime authority to execution identity and runtime epoch; Ed25519 is available when cryptographic attestation of the object is required.
-- **What does VERIFIED mean?** Only that the defined verification procedure and required evidence checks succeeded; it is not a truth oracle.
 
 ## Implementation status
 
