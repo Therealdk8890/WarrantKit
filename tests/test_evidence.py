@@ -11,7 +11,7 @@ def _envelope() -> EvidenceEnvelope:
             "epoch": 0,
         },
         events=(
-            {"execution_id": "exec-1", "sequence": 1, "name": "admission_verified"},
+            {"execution_id": "exec-1", "sequence": 1, "name": "admission_verified", "epoch": 0},
         ),
         enforcement={"complete": True},
         verification={"status": "verified", "method": "unit-test"},
@@ -124,3 +124,22 @@ def test_evidence_parses_legacy_v1_without_external_evidence() -> None:
 
     assert restored.schema_version == "agentcontain.evidence/v1"
     assert restored.external_evidence == ()
+
+
+
+def test_evidence_rejects_event_without_epoch() -> None:
+    try:
+        EvidenceEnvelope.from_execution(
+            execution={
+                "execution_id": "exec-1",
+                "agent_id": "agent-1",
+                "policy_id": "production",
+                "policy_digest": "digest",
+                "epoch": 0,
+            },
+            events=({"execution_id": "exec-1", "sequence": 1, "name": "event_without_epoch"},),
+        )
+    except ValueError as exc:
+        assert "epoch is required" in str(exc)
+    else:
+        raise AssertionError("event without epoch was accepted")
