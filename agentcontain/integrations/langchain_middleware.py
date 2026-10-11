@@ -31,6 +31,7 @@ class WarrantKitMiddleware:
         admission: Admission,
         gateway,
         *,
+        warrant_verifier,
         capabilities: dict[str, str] | None = None,
         risk: int = 0,
         resource: str = "langchain-tool",
@@ -44,6 +45,9 @@ class WarrantKitMiddleware:
             raise ValueError("risk must be between 0 and 100")
         self.admission = admission
         self.gateway = gateway
+        if warrant_verifier is None:
+            raise ValueError("a trusted Ed25519 Warrant verifier is required")
+        self.warrant_verifier = warrant_verifier
         self.capabilities = dict(capabilities or {})
         self.risk = risk
         self.resource = resource
@@ -51,7 +55,7 @@ class WarrantKitMiddleware:
     def wrap_tool_call(self, request: Any, handler: Any) -> Any:
         """Verify and enforce one LangChain tool call before its handler runs."""
         operation = str(request.tool.name)
-        _verify_current_authority(self.admission, self.gateway)
+        _verify_current_authority(self.admission, self.gateway, self.warrant_verifier)
 
         warrant = self.admission.warrant
         assert warrant is not None
@@ -86,6 +90,7 @@ def warrantkit_middleware(
     admission: Admission,
     gateway,
     *,
+    warrant_verifier,
     capabilities: dict[str, str] | None = None,
     risk: int = 0,
     resource: str = "langchain-tool",
@@ -105,6 +110,7 @@ def warrantkit_middleware(
     protected = WarrantKitMiddleware(
         admission,
         gateway,
+        warrant_verifier=warrant_verifier,
         capabilities=capabilities,
         risk=risk,
         resource=resource,
