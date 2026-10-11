@@ -48,6 +48,11 @@ def _verify_current_authority(admission: Admission, gateway) -> None:
         )
     except ValueError as exc:
         raise LangChainWarrantError(f"Warrant verification failed: {exc}") from exc
+    accepted_capabilities = set(admission.policy.policy.capabilities)
+    if not set(warrant.authority.capabilities).issubset(accepted_capabilities):
+        raise LangChainWarrantError(
+            "Warrant capabilities exceed the accepted policy"
+        )
     if warrant.lifecycle.state is RevocationState.REVOKED:
         raise LangChainWarrantError("Warrant is revoked")
 
