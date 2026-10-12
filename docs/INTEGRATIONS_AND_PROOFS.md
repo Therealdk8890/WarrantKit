@@ -221,6 +221,7 @@ A deny-all egress rule can serve as a kill switch, but it is not destination pol
 | Evidence envelopes and epoch scoping | **Implemented · CI-tested** | Runtime proof is bound to execution identity and epoch. |
 | HMAC-authenticated receipts | **Implemented · CI-tested** | Shared-secret authentication and tamper detection; not non-repudiable attestation. |
 | Ed25519 Warrant/receipt attestation | **Implemented · CI-tested** | Optional asymmetric authentication of Warrant/receipt artifacts; trust still depends on configured public-key anchors. |
+| OpenAI Agents SDK local function tools | **Implemented · CI pending** | Synchronous Python functions only; Warrant check plus controller-owned ActionGateway lease. Hosted tools and async-native execution are not covered. |
 | Linux cgroup-v2 workload containment | **Implemented · privileged integration-tested** | Requires Linux cgroup v2 and the required host privileges/delegation. |
 | Adversarial containment/security regression tests | **Implemented · CI-tested** | Covers fail-closed and stale-authority/escape conditions in the tested environment. |
 | Local fleet governance primitives | **Implemented · CI-tested** | Inventory, assignment, rollout/reconciliation, and status history are local foundations. |
