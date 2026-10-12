@@ -2,65 +2,13 @@
 
 [![WarrantKit CI](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml)
 
-**Authority that expires when the runtime state that created it changes.**
+**Authority that stops being valid when the runtime state that created it changes.**
 
-WarrantKit binds an execution's authority to accepted policy, runtime identity, and runtime epoch. When the controller advances that epoch during containment, retained pre-containment authority no longer matches current runtime state.
+WarrantKit binds execution authority to accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, retained pre-containment authority is fenced out. WarrantKit coordinates the authority lifecycle; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides external runtime enforcement.
 
-WarrantKit is the authority/lifecycle layer; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) is the external runtime enforcement engine.
+## Start with the framework-to-gateway proof
 
-## Enforcement boundary, stated first
-
-**A Warrant check and the runtime enforcement check are related, but they are not the same object.** WarrantKit's framework adapter verifies the Warrant against the controller's current runtime identity and epoch, then sends the action through AgentContainment's ActionGateway. The gateway's final runtime enforcement is based on controller-owned execution leases. The adapter's Warrant check must reject stale authority before it reaches the gateway; the gateway remains the final enforcement point for the side effect.
-
-This is an explicit two-check design, not a claim that ActionGateway directly consumes a serialized Warrant as a bearer credential. The framework proof tests the complete adapter-to-gateway path by showing that a protected tool call succeeds before containment and that a retained pre-containment Warrant is rejected before the second tool side effect.
-
-**The process that runs the agent must not hold credentials that let it perform protected side effects without the enforcement boundary.** Payment API keys, database credentials, cloud credentials, and equivalent secrets must be held by the trusted gateway/controller or by a downstream service that independently enforces the same authorization. If the agent can call the downstream API directly with its own unrestricted key, the gateway is advisory and WarrantKit cannot prevent that bypass.
-
-WarrantKit's Warrant is a typed authority contract, not currently a bearer credential consumed directly by AgentContainment's ActionGateway. The gateway enforces controller-owned execution leases. A serialized or unsigned Warrant is not self-authenticating. Protected LangChain and CrewAI tool paths require the Warrant to be signed at issuance and verified against a deployment-configured Ed25519 public-key anchor. This authenticates the Warrant payload; it does not isolate the controller from the verifier or a compromised host. The verifier/controller in the no-root demo run in one Python process, so isolation remains a deployment requirement. See the [threat model](docs/THREAT_MODEL.md).
-
-## Demonstrate the enforcement boundary
-
-Use the proof level that matches the claim you need to establish:
-
-1. **Portable authority proof — no root required.** Run `warrantkit demo` to show that a retained Warrant is rejected after the runtime epoch advances. This proves stale-authority rejection, not host process termination.
-2. **Framework-to-gateway proof — deterministic, no LLM or network.** Run `python tools/run_authority_boundary_demo.py` to show a protected LangChain tool executing before containment and being blocked afterward, before a second side effect.
-3. **Real host-enforcement proof — recommended for a security review.** On Linux with cgroup-v2 and root or equivalent delegation, follow the [real-kill proof](docs/REAL_KILL_DEMO.md). It checks the actual workload and cgroup state, verifies that pre-containment authority is stale, exports runtime-pinned evidence, and runs the portable verifier.
-
-The third proof is the one to use when demonstrating **actual process containment**. It fails closed when the host prerequisites or expected enforcement results are absent. Preserve the artifact with the exact source revision and host details. The default demo signing key provides integrity checking, not producer authentication; for authenticated evidence, use an operator-controlled Ed25519 key and verify with its independently provisioned public key as described in the [real-kill guide](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation).
-
-## Narrow proof: reject a stale Warrant
-
-Install the package and run the stale-Warrant verifier proof:
-
-```bash
-python -m pip install --upgrade warrantkit
-warrantkit demo
-```
-
-The proof retains a serialized copy of an active Warrant, reads the current epoch from the AgentContainment controller runtime, performs containment, and verifies that the retained pre-containment Warrant is rejected against the advanced epoch. It needs no root privileges, LLM, LangChain, source clone, or submodule checkout.
-
-**What this proves:** the verifier rejects retained authority bound to the previous runtime epoch.
-
-**What it does not prove:** that ActionGateway consumes the Warrant directly, that the issuer's signature is authenticated, or that the controller is isolated from the verifier or a compromised host. For the adapter-to-gateway side-effect proof, continue to the framework demonstration below. For kernel-enforced workload termination, use the separate [privileged Linux proof](docs/REAL_KILL_DEMO.md).
-
-To see the simulated incident-lifecycle walkthrough instead, run `warrantkit demo lifecycle`. That walkthrough explicitly reports that host enforcement verification is not claimed.
-
-## What epoch fencing adds
-
-Epoch fencing is a form of **fencing token**, a known distributed-systems pattern: a resource checks a monotonically advancing generation so work from an earlier owner or runtime state is rejected. See [Martin Kleppmann's explanation of fencing tokens](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html).
-
-A revocation list can also invalidate a credential immediately when every enforcement point checks it. The distinction is not “epoch is immediate, revocation is delayed.” Instead:
-
-- **Per-Warrant revocation** tracks individual credentials and requires the relevant revocation state to be available and checked.
-- **Epoch fencing** invalidates every retained Warrant from an older runtime generation by comparing against one controller-owned epoch, without tracking every copy individually.
-- **Operational cost:** the invalidation is coarse-grained. Advancing the runtime epoch invalidates *all* Warrants bound to the prior epoch, including legitimate ones; affected executions need fresh authority issued for the new epoch.
-- **Expiry** bounds validity by time; it is useful as a separate defense, not a substitute for either revocation or epoch checks.
-
-In the framework proof, explicit revocation can cause the first rejection. The first proof above isolates the epoch mismatch by retaining an active serialized copy while the controller advances the runtime epoch.
-
-## Second act: framework tool, then external containment
-
-The deterministic framework proof is the stronger end-to-end example: it uses a real LangChain tool and AgentContainment's ActionGateway, but no LLM, network call, or API key. The adapter checks the Warrant against current runtime state, then calls the gateway, whose controller-owned lease is the final enforcement mechanism. The proof invokes the protected tool before containment, advances the runtime state, and shows that the retained Warrant is rejected before the second side effect can run. The Warrant and lease are distinct objects; this proves the adapter-to-gateway execution path, not that the gateway directly consumes the Warrant.
+This deterministic proof uses a real LangChain tool and AgentContainment's ActionGateway, without an LLM, network access, or real credentials. It shows an allowed tool side effect before containment, then proves the retained Warrant is rejected before a second side effect can occur.
 
 ```bash
 git clone --recurse-submodules https://github.com/Therealdk8890/WarrantKit.git
@@ -69,46 +17,103 @@ python -m pip install ".[langchain]"
 python tools/run_authority_boundary_demo.py
 ```
 
-Expected proof properties:
-- the first protected tool call executes;
-- external containment advances the runtime epoch;
-- the retained pre-containment Warrant is rejected;
-- the second protected call does not reach the underlying side effect.
+**What this proves:** the adapter validates current Warrant authority, routes the call through ActionGateway, and blocks a retained pre-containment Warrant before the protected tool's second side effect.
 
-This does **not** prove universal host isolation, reversal of completed side effects, or that a serialized Warrant is itself an ActionGateway credential.
+**What it does not prove:** kernel-enforced process termination, universal host isolation, reversal of completed side effects, or that the Warrant is itself a gateway credential. The gateway separately enforces controller-owned execution leases.
 
-## What WarrantKit is — and is not
+## The proof ladder
 
-A **Warrant** binds one execution to accepted policy identity and digest, runtime identity and epoch, validity, capabilities, constraints, and evidence requirements.
+Choose the demonstration that matches the claim you need to establish.
 
-- **Warrant = authority.**
-- **Evidence = what was observed or produced.**
-- **Verification = whether defined checks succeeded.**
-- **Receipt = a record of evidence and its stated authentication status.**
+1. **Framework-to-gateway proof — best first run.** The command above exercises the adapter and gateway path and checks that the second side effect never occurs.
+2. **Real host-enforcement proof — strongest containment evidence.** On Linux with cgroup-v2 and root or equivalent delegation, follow the [real-kill guide](docs/REAL_KILL_DEMO.md). It checks the workload and cgroup state, verifies stale authority, and exports evidence. This is the proof to use when claiming actual process containment.
+3. **Portable lifecycle demo — quick orientation, not independent security evidence.** Install WarrantKit and run `warrantkit demo`. It illustrates authority invalidation after an epoch change, but the no-root verifier and controller share one Python process.
 
-Evidence never grants authority. **Verified does not mean an external claim is true.**
+```bash
+python -m pip install --upgrade warrantkit
+warrantkit demo
+```
 
-The current egress path is not a general destination-policy engine: a deny-all egress rule can act as a kill switch, but it does not implement an allowlist of approved destinations. See the [egress binding contract](docs/EGRESS_BINDING_CONTRACT.md).
+Each proof has a narrower claim than a full production deployment. Preserve real-kill artifacts with the exact source revision and host details. The default demo signing key supports integrity checks only; authenticated incident evidence requires an operator-controlled Ed25519 key and a public key provisioned independently of the evidence bundle. See the [real-kill guide](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation) and [trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
-WarrantKit is not a sandbox, a universal host-isolation guarantee, a secret manager, a mechanism for reversing completed side effects, or a replacement for IAM, policy engines, cgroups, or independent provenance verification. It complements those controls by binding execution authority to runtime state and fencing stale authority after a security event.
+## Agent integration
+
+The LangChain adapter protects a tool by admitting an execution under a policy, wrapping the tool with the admission and gateway, and then containing the execution when needed. This abbreviated example shows the shape; see the [complete runnable integration](docs/INTEGRATIONS_AND_PROOFS.md#langchain-integration) for imports, signer setup, and trusted-key configuration.
+
+```python
+admission = admit(policy, agent_id="payments-agent", engine=engine,
+                  runtime_id=engine.runtime_id, warrant_signer=signer)
+gateway = ActionGateway(PolicyEngine(), engine.controller)
+protected_refund = wrap_langchain_tool(
+    payments_refund, admission, gateway, warrant_verifier=verifier
+)
+agent = create_agent(model, tools=[protected_refund])
+# When a security event requires stopping this execution:
+contain(admission)
+```
+
+Use a deployment-managed signing key and independently provisioned Ed25519 public-key anchor in production. Do not place the private key or unrestricted downstream credentials in the agent process.
+
+## Critical deployment boundary: credentials
+
+> **If the agent holds its own unrestricted API key or other credential that can perform a protected side effect directly, the gateway is advisory.** Keep downstream credentials behind the trusted gateway/controller or ensure the downstream service independently enforces the same authorization. WarrantKit cannot block a path that bypasses its enforcement boundary.
+
+## Why the Warrant and lease are separate
+
+This is a deliberate two-check design in the current implementation, not an accidental claim that the objects are interchangeable:
+
+- The framework adapter verifies the signed Warrant against current execution identity, policy binding, capabilities, and runtime epoch.
+- The adapter then routes the action through AgentContainment's ActionGateway.
+- ActionGateway's final runtime enforcement uses controller-owned execution leases; it does not consume the serialized Warrant as a bearer credential.
+
+The checks protect different boundaries: the Warrant check rejects stale authority before the tool handler reaches the gateway, and the gateway lease check is the final side-effect enforcement point. Keeping lease issuance and validation under controller ownership prevents a caller-constructed lease from authorizing gateway effects. The framework proof tests the combined path and confirms that the second side effect is not reached.
+
+**Roadmap status:** direct gateway consumption of a Warrant, or cryptographically deriving a gateway lease from a Warrant, is not implemented today. It should be treated as an architectural change requiring a clear threat-model benefit and regression proofs—not as a feature users can assume exists. See the [AgentContainment security contract](https://github.com/Therealdk8890/AgentContainment/blob/main/docs/SECURITY_CONTRACT.md).
+
+## What WarrantKit means by authority and evidence
+
+- **Warrant:** a typed authority contract bound to policy identity and digest, execution identity, runtime identity and epoch, validity, capabilities, constraints, and evidence requirements.
+- **Evidence:** what a component observed or produced.
+- **Verification:** whether specified checks succeeded.
+- **Receipt:** a record of evidence and its stated authentication status.
+
+**Evidence never grants authority. Verified does not mean an external claim is true.** Ed25519 signatures authenticate a payload relative to a separately trusted public key; they do not attest that every claim is true or that the host/kernel is uncompromised.
+
+## Epoch fencing is not expiry
+
+Epoch fencing invalidates every retained Warrant tied to an older runtime generation when the controller advances the epoch. This is a known fencing-token pattern, not a claim that epoch checks are unique to WarrantKit.
+
+- **Epoch fencing:** coarse-grained invalidation of all authority tied to a prior runtime generation.
+- **Per-Warrant revocation:** tracks individual credentials and requires revocation state to be available and checked.
+- **Expiry:** bounds validity by time. It is a separate defense, not a substitute for epoch checks or revocation.
+
+Advancing an epoch also invalidates legitimate Warrants from the prior generation; affected work must receive fresh authority under the new runtime state. See [Martin Kleppmann's explanation of fencing tokens](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html).
 
 ## How WarrantKit differs
 
-| Approach | Primary guarantee | WarrantKit's distinct contribution |
-|---|---|---|
-| OPA / Cedar | Policy decision | Runtime-scoped authority lifecycle, epoch fencing, and recovery gating around protected actions |
-| cgroup-v2 | Process/resource containment | An authority contract tied to execution identity and runtime epoch |
-| Capability-token systems | Scoped or delegated authority | Runtime-generation fencing plus external containment; not a claim that capability warrants are unique to WarrantKit |
-| Short-lived credentials + revocation list | Expiry and explicit per-credential revocation | One runtime epoch invalidates all older-generation authority without a per-copy revocation list; a revocation list can also invalidate immediately |
-| Tenuo and Liceat | Warrant-based, task-scoped agent authorization and capability controls | WarrantKit's emphasis is runtime-epoch invalidation tied to an external containment controller and a controller-owned gateway lease ([Tenuo](https://github.com/tenuo-ai/tenuo), [Liceat](https://liceat.com/)) |
+These projects overlap in agent authorization. The distinctions below summarize their public documentation, not a claim that any project lacks features beyond this comparison.
 
-## Start here
+| Approach | Publicly documented focus | WarrantKit's focus |
+|---|---|---|
+| [Tenuo](https://github.com/tenuo-ai/tenuo) | Signed, holder-bound, task-scoped capability warrants; constrained tool arguments; delegation that can only narrow authority; enforcement at the action boundary | Adds runtime-epoch invalidation tied to an external containment controller and a controller-owned gateway lease |
+| [Liceat](https://liceat.com/) | Scoped, holder-bound and revocable warrants, including spend/rate limits; offline verification and point-of-action enforcement with audit records | Adds runtime-epoch invalidation tied to an external containment controller and a controller-owned gateway lease |
+| OPA / Cedar | Policy evaluation and authorization decisions | Runtime-scoped authority lifecycle, epoch fencing, and recovery gating around protected actions |
+| cgroup-v2 | Kernel-level process/resource containment | An authority contract tied to execution identity and runtime epoch |
+| Short-lived credentials and revocation lists | Time-bounded validity and explicit per-credential revocation | One runtime epoch can invalidate all prior-generation authority without tracking every copy individually; revocation can also be immediate when checked at each enforcement point |
+
+The contribution is the combination of authority bound to runtime state, stale-authority rejection, external containment, and verifiable incident evidence—not the invention of warrants, signatures, or fencing tokens.
+
+## What WarrantKit is — and is not
+
+WarrantKit complements rather than replaces IAM, policy engines, host isolation, cgroups, secret management, or independent provenance verification. It is not a sandbox, a universal host-isolation guarantee, a mechanism for reversing completed side effects, or a general destination-policy engine. The current egress path can use deny-all as a kill switch; it does not implement a general allowlist of approved destinations. See the [egress binding contract](docs/EGRESS_BINDING_CONTRACT.md).
+
+## Further reading
 
 - [Threat model](docs/THREAT_MODEL.md)
-- [Real-kill demo requirements](docs/REAL_KILL_DEMO.md)
+- [Real-kill demo requirements and evidence interpretation](docs/REAL_KILL_DEMO.md)
+- [Trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md)
 - [Implementation status: CI-tested versus planned](docs/INTEGRATIONS_AND_PROOFS.md#implementation-status)
 - [Extended integrations, evidence, and proof documentation](docs/INTEGRATIONS_AND_PROOFS.md)
-- [AgentContainment security contract](https://github.com/Therealdk8890/AgentContainment/blob/main/docs/SECURITY_CONTRACT.md)
 
 ## License
 
