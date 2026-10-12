@@ -1,5 +1,6 @@
 import asyncio
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,7 +11,11 @@ from agent_containment.policy import PolicyEngine
 
 
 def _invoke(tool, arguments: dict) -> str:
-    return asyncio.run(tool.on_invoke_tool(None, json.dumps(arguments)))
+    # FunctionTool's direct invocation API expects the context fields normally
+    # supplied by the Agents SDK runner. These tests exercise the actual SDK
+    # FunctionTool parser/invocation path without making a model/API request.
+    context = SimpleNamespace(tool_name=tool.name, _function_tool_arguments=None)
+    return asyncio.run(tool.on_invoke_tool(context, json.dumps(arguments)))
 
 
 def _setup(agent_id: str, capability: str):
