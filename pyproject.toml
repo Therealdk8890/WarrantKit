@@ -33,6 +33,10 @@ crewai = [
     "crewai>=1.15,<2",
     "cryptography>=42",
 ]
+openai-agents = [
+    "openai-agents>=0.3,<1",
+    "cryptography>=42",
+]
 attestation = [
     "cryptography>=42",
 ]
