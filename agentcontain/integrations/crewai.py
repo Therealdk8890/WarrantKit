@@ -6,6 +6,7 @@ the controller-owned gateway is the final runtime enforcement point.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -28,7 +29,17 @@ def _current_runtime(admission: Admission, gateway):
     return runtime
 
 
-def _verify_current_authority(admission: Admission, gateway, warrant_verifier) -> None:
+def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
+    expected_identity, expected_policy, expected_warrant, expected_attestation = expected_snapshot
+    if (
+        admission.identity != expected_identity
+        or admission.policy != expected_policy
+        or admission.warrant != expected_warrant
+        or admission.warrant_attestation != expected_attestation
+    ):
+        raise CrewAIWarrantError(
+            "admission authority changed after the protected tool was wrapped"
+        )
     warrant = admission.warrant
     if warrant is None:
         raise CrewAIWarrantError("execution has no Warrant authority")
@@ -94,13 +105,22 @@ def wrap_crewai_tool(
     if not isinstance(tool, BaseTool):
         raise TypeError("wrap_crewai_tool expects a CrewAI BaseTool instance")
 
+    # Pin this wrapper to the authority accepted at construction time; a
+    # different signed Warrant must not be replayed through mutable Admission.
+    expected_snapshot = (
+        admission.identity,
+        deepcopy(admission.policy),
+        admission.warrant,
+        deepcopy(admission.warrant_attestation),
+    )
+
     operation = str(tool.name)
     required_capability = capability or operation
     original_args_schema = getattr(tool, "args_schema", None)
     original_description = getattr(tool, "description", None)
 
     def invoke_authorized(**kwargs: Any) -> Any:
-        _verify_current_authority(admission, gateway, warrant_verifier)
+        _verify_current_authority(admission, gateway, warrant_verifier, expected_snapshot)
         warrant = admission.warrant
         assert warrant is not None
         if required_capability not in warrant.authority.capabilities:
