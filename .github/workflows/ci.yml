@@ -151,7 +151,7 @@ jobs:
               )
           ).decode("ascii")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write(f"WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64={public_key_b64}\\n")
+              env.write(f"WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64={public_key_b64}\n")
           PY
 
       - name: Run operator-facing real-kill evidence proof
@@ -171,7 +171,7 @@ jobs:
       - name: Verify incident bundle against separately supplied CI trust anchor
         run: |
           result="$(python tools/verify_incident_bundle.py ./incident-bundle --trusted-public-key "$WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64")"
-          printf '%s\\n' "$result"
+          printf '%s\n' "$result"
           case "$result" in
             AUTHENTICATED:*) ;;
             *) echo "Expected AUTHENTICATED result from trusted-key verification" >&2; exit 1 ;;
