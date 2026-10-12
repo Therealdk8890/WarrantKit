@@ -45,7 +45,7 @@ python tools/verify_incident_bundle.py ./incident-bundle \
   --trusted-public-key "$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64"
 ```
 
-The trusted public key must be obtained independently; copying the key from the bundle does not establish trust. Preserve the bundle alongside the exact source revision and host/environment details for review.
+The trusted public key must be obtained independently; copying the key from the bundle does not establish trust. Preserve the bundle alongside the exact source revision and host/environment details for review. For production provisioning, rotation, suspected compromise, historical verification, and evidence retention, follow the [incident trust-anchor operations guide](INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
 ## Short live walkthrough
 
