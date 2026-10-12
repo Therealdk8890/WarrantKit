@@ -127,11 +127,40 @@ jobs:
         run: |
           sudo -E "$pythonLocation/bin/python" -m pytest -q tests/integration/test_real_cgroup_execution.py tests/test_runtime_pinned_interoperability.py
 
+      - name: Generate isolated CI Ed25519 signing key
+        run: |
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+          from cryptography.hazmat.primitives import serialization
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+          key = Ed25519PrivateKey.generate()
+          Path("/tmp/warrantkit-ci-signing-key.pem").write_bytes(
+              key.private_bytes(
+                  serialization.Encoding.PEM,
+                  serialization.PrivateFormat.PKCS8,
+                  serialization.NoEncryption(),
+              )
+          )
+          public_key_b64 = base64.b64encode(
+              key.public_key().public_bytes(
+                  serialization.Encoding.Raw,
+                  serialization.PublicFormat.Raw,
+              )
+          ).decode("ascii")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64={public_key_b64}\n")
+          PY
+
       - name: Run operator-facing real-kill evidence proof
         env:
           AGENT_CONTAIN_RUN_REAL_CGROUP: "1"
           WARRANTKIT_REAL_KILL_ARTIFACT: ./incident-bundle/runtime-evidence.json
           WARRANTKIT_INCIDENT_BUNDLE_DIR: ./incident-bundle
+          WARRANTKIT_INCIDENT_SIGNING_KEY_FILE: /tmp/warrantkit-ci-signing-key.pem
+          WARRANTKIT_INCIDENT_SIGNING_KEY_ID: warrantkit-ci-test-key
         run: |
           sudo -E "$pythonLocation/bin/python" tools/run_real_kill_demo.py
 
@@ -139,9 +168,14 @@ jobs:
         run: |
           python tools/verify_runtime_evidence.py ./incident-bundle/runtime-evidence.json
 
-      - name: Independently verify signed incident bundle
+      - name: Verify incident bundle against separately supplied CI trust anchor
         run: |
-          python tools/verify_incident_bundle.py ./incident-bundle
+          result="$(python tools/verify_incident_bundle.py ./incident-bundle --trusted-public-key "$WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64")"
+          printf '%s\n' "$result"
+          case "$result" in
+            AUTHENTICATED:*) ;;
+            *) echo "Expected AUTHENTICATED result from trusted-key verification" >&2; exit 1 ;;
+          esac
 
       - name: Upload real-kill incident bundle
         uses: actions/upload-artifact@v4
