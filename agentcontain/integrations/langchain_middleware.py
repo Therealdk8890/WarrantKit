@@ -7,6 +7,7 @@ runtime enforcement point.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 from uuid import uuid4
 
@@ -45,6 +46,12 @@ class WarrantKitMiddleware:
             raise ValueError("risk must be between 0 and 100")
         self.admission = admission
         self.gateway = gateway
+        self.expected_snapshot = (
+            admission.identity,
+            deepcopy(admission.policy),
+            admission.warrant,
+            deepcopy(admission.warrant_attestation),
+        )
         if warrant_verifier is None:
             raise ValueError("a trusted Ed25519 Warrant verifier is required")
         self.warrant_verifier = warrant_verifier
@@ -55,7 +62,7 @@ class WarrantKitMiddleware:
     def wrap_tool_call(self, request: Any, handler: Any) -> Any:
         """Verify and enforce one LangChain tool call before its handler runs."""
         operation = str(request.tool.name)
-        _verify_current_authority(self.admission, self.gateway, self.warrant_verifier)
+        _verify_current_authority(self.admission, self.gateway, self.warrant_verifier, self.expected_snapshot)
 
         warrant = self.admission.warrant
         assert warrant is not None
