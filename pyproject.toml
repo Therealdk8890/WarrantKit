@@ -33,12 +33,17 @@ crewai = [
     "crewai>=1.15,<2",
     "cryptography>=42",
 ]
+openai-agents = [
+    "openai-agents>=0.3,<1",
+    "cryptography>=42",
+]
 attestation = [
     "cryptography>=42",
 ]
 test = [
     "pytest>=7",
     "warrantkit[attestation]",
+    "warrantkit[openai-agents]",
 ]
 
 [tool.pytest.ini_options]
