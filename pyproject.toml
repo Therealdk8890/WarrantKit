@@ -43,6 +43,7 @@ attestation = [
 test = [
     "pytest>=7",
     "warrantkit[attestation]",
+    "warrantkit[openai-agents]",
 ]
 
 [tool.pytest.ini_options]
