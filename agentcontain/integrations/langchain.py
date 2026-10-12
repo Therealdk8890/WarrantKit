@@ -7,6 +7,7 @@ point.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
@@ -29,7 +30,17 @@ def _current_runtime(admission: Admission, gateway):
     return runtime
 
 
-def _verify_current_authority(admission: Admission, gateway, warrant_verifier) -> None:
+def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
+    expected_identity, expected_policy, expected_warrant, expected_attestation = expected_snapshot
+    if (
+        admission.identity != expected_identity
+        or admission.policy != expected_policy
+        or admission.warrant != expected_warrant
+        or admission.warrant_attestation != expected_attestation
+    ):
+        raise LangChainWarrantError(
+            "admission authority changed after the protected tool was wrapped"
+        )
     warrant = admission.warrant
     if warrant is None:
         raise LangChainWarrantError("execution has no Warrant authority")
@@ -104,11 +115,21 @@ def wrap_langchain_tool(
             "LangChain is not installed; install WarrantKit with the langchain extra"
         ) from exc
 
+    # Pin the exact accepted authority to this wrapper. A different but validly
+    # signed Warrant for another execution must not be replayed by mutating the
+    # public Admission object after the wrapper was created.
+    expected_snapshot = (
+        admission.identity,
+        deepcopy(admission.policy),
+        admission.warrant,
+        deepcopy(admission.warrant_attestation),
+    )
+
     operation = str(tool.name)
     required_capability = capability or operation
 
     def invoke_authorized(**kwargs: Any) -> Any:
-        _verify_current_authority(admission, gateway, warrant_verifier)
+        _verify_current_authority(admission, gateway, warrant_verifier, expected_snapshot)
         warrant = admission.warrant
         assert warrant is not None
         if required_capability not in warrant.authority.capabilities:
