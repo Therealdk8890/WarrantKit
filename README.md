@@ -18,6 +18,16 @@ This is an explicit two-check design, not a claim that ActionGateway directly co
 
 WarrantKit's Warrant is a typed authority contract, not currently a bearer credential consumed directly by AgentContainment's ActionGateway. The gateway enforces controller-owned execution leases. A serialized or unsigned Warrant is not self-authenticating. Protected LangChain and CrewAI tool paths require the Warrant to be signed at issuance and verified against a deployment-configured Ed25519 public-key anchor. This authenticates the Warrant payload; it does not isolate the controller from the verifier or a compromised host. The verifier/controller in the no-root demo run in one Python process, so isolation remains a deployment requirement. See the [threat model](docs/THREAT_MODEL.md).
 
+## Demonstrate the enforcement boundary
+
+Use the proof level that matches the claim you need to establish:
+
+1. **Portable authority proof — no root required.** Run `warrantkit demo` to show that a retained Warrant is rejected after the runtime epoch advances. This proves stale-authority rejection, not host process termination.
+2. **Framework-to-gateway proof — deterministic, no LLM or network.** Run `python tools/run_authority_boundary_demo.py` to show a protected LangChain tool executing before containment and being blocked afterward, before a second side effect.
+3. **Real host-enforcement proof — recommended for a security review.** On Linux with cgroup-v2 and root or equivalent delegation, follow the [real-kill proof](docs/REAL_KILL_DEMO.md). It checks the actual workload and cgroup state, verifies that pre-containment authority is stale, exports runtime-pinned evidence, and runs the portable verifier.
+
+The third proof is the one to use when demonstrating **actual process containment**. It fails closed when the host prerequisites or expected enforcement results are absent. Preserve the artifact with the exact source revision and host details. The default demo signing key provides integrity checking, not producer authentication; for authenticated evidence, use an operator-controlled Ed25519 key and verify with its independently provisioned public key as described in the [real-kill guide](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation).
+
 ## Narrow proof: reject a stale Warrant
 
 Install the package and run the stale-Warrant verifier proof:
