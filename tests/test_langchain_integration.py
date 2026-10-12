@@ -199,3 +199,66 @@ def test_langchain_tool_rejects_unsigned_warrant_before_side_effect() -> None:
     with pytest.raises(LangChainWarrantError, match="no signed Warrant attestation"):
         wrapped.invoke({"value": "must-not-run"})
     assert calls == []
+
+
+def test_langchain_wrapper_rejects_replay_of_another_valid_signed_warrant():
+    """A different authentic Warrant must not replace this wrapper's authority."""
+    pytest.importorskip("langchain_core")
+    from datetime import datetime, timedelta, timezone
+    from langchain_core.tools import tool
+    from agentcontain import ExecutionIdentity
+    from agentcontain.warrant import Warrant
+    from agentcontain.integrations.langchain import LangChainWarrantError, wrap_langchain_tool
+
+    calls = []
+
+    @tool
+    def protected_write(value: str) -> str:
+        calls.append(value)
+        return "written"
+
+    engine = build_agentcontainment_engine("agent-langchain-replay")
+    signer = Ed25519Signer.generate("langchain-replay-test")
+    policy = Policy("limited", capabilities=("protected_write",))
+    admission = admit(
+        policy,
+        agent_id="agent-langchain-replay",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+        warrant_signer=signer,
+    )
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    wrapped = wrap_langchain_tool(
+        protected_write,
+        admission,
+        gateway,
+        warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}),
+    )
+
+    now = datetime.now(timezone.utc)
+    replay_identity = ExecutionIdentity.create(
+        admission.identity.agent_id,
+        admission.identity.policy_id,
+        admission.identity.policy_digest,
+        runtime_id=engine.runtime_id,
+        epoch=admission.identity.epoch,
+    )
+    replay_warrant = Warrant.issue(
+        warrant_id="other-valid-warrant",
+        issuer="warrantkit",
+        agent_id=replay_identity.agent_id,
+        execution_id=replay_identity.execution_id,
+        policy=admission.policy,
+        runtime_id=engine.runtime_id,
+        epoch=replay_identity.epoch,
+        issued_at=now,
+        expires_at=now + timedelta(minutes=5),
+        capabilities=("protected_write",),
+    )
+    admission.identity = replay_identity
+    admission.warrant = replay_warrant
+    admission.warrant_attestation = signer.sign_warrant(replay_warrant).to_dict()
+
+    with pytest.raises(LangChainWarrantError, match="authority changed"):
+        wrapped.invoke({"value": "must-not-run"})
+    assert calls == []
