@@ -26,33 +26,21 @@ The repository's CI creates an ephemeral test key only to exercise the authentic
 
 The signing process reads the private key from `WARRANTKIT_INCIDENT_SIGNING_KEY_FILE` and the key ID from `WARRANTKIT_INCIDENT_SIGNING_KEY_ID`. Configure these only in the trusted operator-controlled environment that creates the bundle.
 
-The verifier accepts the public key as base64-encoded raw Ed25519 public-key bytes:
+Obtain `warrantkit-public-key.pem` through your trusted provisioning process—not from the bundle under review. From the repository root, derive both the fingerprint to compare against your inventory and the base64 input expected by the verifier:
 
 ```bash
-python - <<'PY'
-import base64
-from pathlib import Path
-from cryptography.hazmat.primitives import serialization
-
-public_key = serialization.load_pem_public_key(
-    Path("warrantkit-public-key.pem").read_bytes()
-)
-raw = public_key.public_bytes(
-    serialization.Encoding.Raw,
-    serialization.PublicFormat.Raw,
-)
-print(base64.b64encode(raw).decode("ascii"))
-PY
+python tools/print_trust_anchor.py warrantkit-public-key.pem
 ```
 
-Obtain `warrantkit-public-key.pem` through your trusted provisioning process—not from the bundle under review. Supply the resulting value to the verifier:
+The helper accepts a PEM-encoded Ed25519 public key only. It prints `fingerprint_sha256` as `SHA256:<hex>` over the raw public-key bytes, and `trusted_public_key_b64` for the verifier. You can set the verifier input directly from that trusted PEM file:
 
 ```bash
+export WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="$(python tools/print_trust_anchor.py warrantkit-public-key.pem | sed -n 's/^trusted_public_key_b64=//p')"
 python tools/verify_incident_bundle.py ./incident-bundle \
   --trusted-public-key "$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64"
 ```
 
-Accept the bundle as authenticated only when the verifier reports `AUTHENTICATED` and the key ID and public-key fingerprint match the operator's inventory. Treat `INTEGRITY_ONLY`, `REJECTED`, a key-ID mismatch, or an unknown key as a failed authentication decision. Preserve the complete verifier output with the review record.
+Accept the bundle as authenticated only when the verifier reports `AUTHENTICATED` and the receipt key ID and independently computed public-key fingerprint match the operator's inventory. Treat `INTEGRITY_ONLY`, `REJECTED`, a key-ID mismatch, or an unknown key as a failed authentication decision. Preserve the complete verifier output with the review record. The fingerprint helper identifies a public key; it does not make an untrusted distribution channel trustworthy.
 
 ## Protect, rotate, and revoke keys
 
