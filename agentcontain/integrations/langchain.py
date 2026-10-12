@@ -31,6 +31,13 @@ def _current_runtime(admission: Admission, gateway):
 
 
 def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
+    warrant = admission.warrant
+    if warrant is None:
+        raise LangChainWarrantError("execution has no Warrant authority")
+    if warrant_verifier is None:
+        raise LangChainWarrantError("a trusted Ed25519 Warrant verifier is required")
+    if admission.warrant_attestation is None:
+        raise LangChainWarrantError("execution has no signed Warrant attestation; issue with warrant_signer")
     expected_identity, expected_policy, expected_warrant, expected_attestation = expected_snapshot
     if (
         admission.identity != expected_identity
@@ -41,13 +48,6 @@ def _verify_current_authority(admission: Admission, gateway, warrant_verifier, e
         raise LangChainWarrantError(
             "admission authority changed after the protected tool was wrapped"
         )
-    warrant = admission.warrant
-    if warrant is None:
-        raise LangChainWarrantError("execution has no Warrant authority")
-    if warrant_verifier is None:
-        raise LangChainWarrantError("a trusted Ed25519 Warrant verifier is required")
-    if admission.warrant_attestation is None:
-        raise LangChainWarrantError("execution has no signed Warrant attestation; issue with warrant_signer")
     try:
         signed_warrant = warrant_verifier.verify_warrant(admission.warrant_attestation)
     except (TypeError, ValueError) as exc:
