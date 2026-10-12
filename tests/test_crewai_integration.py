@@ -94,3 +94,61 @@ def test_crewai_tool_rejects_missing_capability_before_side_effect() -> None:
         protected.run(amount=25)
 
     assert tool.calls == []
+
+def test_crewai_tool_rejects_replay_of_another_valid_signed_warrant() -> None:
+    """A different authentic Warrant must not replace this wrapper's authority."""
+    PaymentTool = _integration()
+    from datetime import datetime, timedelta, timezone
+
+    from agentcontain import ExecutionIdentity
+    from agentcontain.integrations.crewai import CrewAIWarrantError, wrap_crewai_tool
+    from agentcontain.warrant import Warrant
+
+    engine = build_agentcontainment_engine("agent-crewai-replay")
+    signer = Ed25519Signer.generate("crewai-replay-test")
+    policy = Policy("payments", capabilities=("payments_refund",))
+    admission = admit(
+        policy,
+        agent_id="agent-crewai-replay",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+        warrant_signer=signer,
+    )
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    tool = PaymentTool()
+    protected = wrap_crewai_tool(
+        tool,
+        admission,
+        gateway,
+        warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}),
+    )
+
+    now = datetime.now(timezone.utc)
+    replay_identity = ExecutionIdentity.create(
+        admission.identity.agent_id,
+        admission.identity.policy_id,
+        admission.identity.policy_digest,
+        runtime_id=engine.runtime_id,
+        epoch=admission.identity.epoch,
+    )
+    replay_warrant = Warrant.issue(
+        warrant_id="other-valid-crewai-warrant",
+        issuer="warrantkit",
+        agent_id=replay_identity.agent_id,
+        execution_id=replay_identity.execution_id,
+        policy=admission.policy,
+        runtime_id=engine.runtime_id,
+        epoch=replay_identity.epoch,
+        issued_at=now,
+        expires_at=now + timedelta(minutes=5),
+        capabilities=("payments_refund",),
+    )
+    admission.identity = replay_identity
+    admission.warrant = replay_warrant
+    admission.warrant_attestation = signer.sign_warrant(replay_warrant).to_dict()
+
+    with pytest.raises(CrewAIWarrantError, match="authority changed"):
+        protected.run(amount=25)
+
+    assert tool.calls == []
+
