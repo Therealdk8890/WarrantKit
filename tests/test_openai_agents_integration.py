@@ -34,7 +34,6 @@ def _setup(agent_id: str, capability: str):
 
 
 def test_openai_agents_tool_executes_authorized_side_effect() -> None:
-    pytest.importorskip("agents")
     from agentcontain.integrations.openai_agents import wrap_openai_tool
 
     calls: list[int] = []
@@ -54,7 +53,6 @@ def test_openai_agents_tool_executes_authorized_side_effect() -> None:
 
 
 def test_openai_agents_tool_blocks_side_effect_after_containment() -> None:
-    pytest.importorskip("agents")
     from agentcontain.integrations.openai_agents import (
         OpenAIAgentsWarrantError,
         wrap_openai_tool,
@@ -81,7 +79,6 @@ def test_openai_agents_tool_blocks_side_effect_after_containment() -> None:
 
 
 def test_openai_agents_tool_rejects_missing_capability() -> None:
-    pytest.importorskip("agents")
     from agentcontain.integrations.openai_agents import (
         OpenAIAgentsWarrantError,
         wrap_openai_tool,
