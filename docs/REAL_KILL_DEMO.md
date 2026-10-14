@@ -45,7 +45,15 @@ python tools/verify_incident_bundle.py ./incident-bundle \
   --trusted-public-key "$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64"
 ```
 
-The trusted public key must be obtained independently; copying the key from the bundle does not establish trust. Preserve the bundle alongside the exact source revision and host/environment details for review. For production provisioning, rotation, suspected compromise, historical verification, and evidence retention, follow the [incident trust-anchor operations guide](INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
+The trusted public key must be obtained independently; copying the key from the bundle does not establish trust. For a CI-generated artifact, the matching GitHub Actions run summary publishes the per-run ephemeral public key separately from the bundle. Use that key to verify the artifact from the same run; it demonstrates consistency with that run's generated signing key, not a production operator's identity or host attestation. After downloading and extracting the artifact, set the key from the run summary and verify:
+
+~~~bash
+export WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="<base64 public key from that run's summary>"
+python tools/verify_incident_bundle.py ./incident-bundle \
+  --trusted-public-key "$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64"
+~~~
+
+Preserve the bundle alongside the exact source revision and host/environment details for review. For production provisioning, rotation, suspected compromise, historical verification, and evidence retention, follow the [incident trust-anchor operations guide](INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
 ## Short live walkthrough
 
