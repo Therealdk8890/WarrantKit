@@ -15,6 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
+from agentcontain.native_provenance import validate_native_provenance_manifest
+
 
 _RECORD_FILES = (
     "authority-issued.json",
@@ -24,6 +26,7 @@ _RECORD_FILES = (
     "provenance.json",
 )
 _BUNDLE_FILES = {*_RECORD_FILES, "public-key.json"}
+_NATIVE_PROVENANCE_FILE = "native-provenance.json"
 
 
 def _canonical(value: Any) -> bytes:
@@ -175,8 +178,14 @@ def write_incident_bundle(
     runtime_evidence: Mapping[str, Any],
     external_proof: Mapping[str, Any],
     provenance: Mapping[str, Any],
+    native_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Write a signed incident bundle and return its manifest."""
+    """Write a signed incident bundle and return its manifest.
+
+    Optional native_provenance supplies manifest_json, run_id, context_id,
+    report_fingerprint, and policy_fingerprint. The exact native manifest bytes
+    are covered by the bundle file digest and signed manifest.
+    """
     try:
         from cryptography.hazmat.primitives import serialization
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -198,6 +207,42 @@ def write_incident_bundle(
     _validate_evidence_contract(records, incident_id=incident_id)
     for name, value in records.items():
         _write_json(output_dir / name, value)
+
+    if native_provenance is not None:
+        evidence = _require_mapping(runtime_evidence, "runtime evidence")
+        execution = _require_mapping(evidence.get("execution"), "runtime evidence execution")
+        required_fields = ("manifest_json", "run_id", "context_id", "report_fingerprint", "policy_fingerprint")
+        if any(not isinstance(native_provenance.get(field), str) or not native_provenance[field] for field in required_fields):
+            raise ValueError("native provenance adapter envelope is incomplete")
+        native_json = native_provenance["manifest_json"]
+        native_result = validate_native_provenance_manifest(
+            native_json,
+            incident_id=incident_id,
+            execution_id=execution["execution_id"],
+            runtime_id=execution["runtime_id"],
+            epoch=execution["epoch"],
+            expected_run_id=native_provenance["run_id"],
+            expected_context_id=native_provenance["context_id"],
+            expected_report_fingerprint=native_provenance["report_fingerprint"],
+            expected_policy_fingerprint=native_provenance["policy_fingerprint"],
+        )
+        _write_json(output_dir / _NATIVE_PROVENANCE_FILE, {
+            "schema_version": "warrantkit.native-provenance-binding/v1",
+            "binding": {
+                "incident_id": incident_id,
+                "execution_id": execution["execution_id"],
+                "runtime_id": execution["runtime_id"],
+                "epoch": execution["epoch"],
+                "run_id": native_result["run_id"],
+                "context_id": native_result["context_id"],
+                "report_fingerprint": native_result["report_fingerprint"],
+                "policy_fingerprint": native_result["policy_fingerprint"],
+            },
+            "manifest_json": native_json,
+            "manifest_sha256": native_result["manifest_sha256"],
+        })
+    elif (output_dir / _NATIVE_PROVENANCE_FILE).exists():
+        (output_dir / _NATIVE_PROVENANCE_FILE).unlink()
 
     signing_key_file = os.environ.get("WARRANTKIT_INCIDENT_SIGNING_KEY_FILE")
     key_id = os.environ.get("WARRANTKIT_INCIDENT_SIGNING_KEY_ID", "incident-signing-key")
@@ -234,10 +279,10 @@ def write_incident_bundle(
     }
     _write_json(output_dir / "public-key.json", public_key_record)
 
-    files = {
-        name: _sha256(output_dir / name)
-        for name in (*records.keys(), "public-key.json")
-    }
+    file_names = (*records.keys(), "public-key.json")
+    if (output_dir / _NATIVE_PROVENANCE_FILE).is_file():
+        file_names = (*file_names, _NATIVE_PROVENANCE_FILE)
+    files = {name: _sha256(output_dir / name) for name in file_names}
     manifest = {
         "schema_version": "warrantkit.incident-bundle/v1",
         "incident_id": incident_id,
@@ -310,8 +355,12 @@ def verify_incident_bundle(
     if not isinstance(manifest, dict) or manifest.get("schema_version") != "warrantkit.incident-bundle/v1":
         raise ValueError("unsupported or malformed incident bundle manifest")
     files = manifest.get("files")
-    if not isinstance(files, dict) or set(files) != _BUNDLE_FILES:
-        raise ValueError("incident bundle manifest must list the exact required files")
+    if not isinstance(files, dict):
+        raise ValueError("incident bundle manifest files must be an object")
+    allowed_files = _BUNDLE_FILES | {_NATIVE_PROVENANCE_FILE}
+    if not _BUNDLE_FILES.issubset(files) or set(files) - allowed_files:
+        raise ValueError("incident bundle manifest must list required files and only supported optional files")
+    has_native_provenance = _NATIVE_PROVENANCE_FILE in files
 
     records: dict[str, Any] = {}
     for name, expected_digest in files.items():
@@ -327,6 +376,42 @@ def verify_incident_bundle(
                 raise ValueError(f"bundle record is not valid JSON: {name}") from exc
     _validate_evidence_contract(records, incident_id=manifest.get("incident_id"))
     _validate_manifest_claims(manifest)
+    native_result = None
+    if has_native_provenance:
+        try:
+            native_record = json.loads((bundle_dir / _NATIVE_PROVENANCE_FILE).read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ValueError("native provenance binding is not valid JSON") from exc
+        if not isinstance(native_record, dict) or native_record.get("schema_version") != "warrantkit.native-provenance-binding/v1":
+            raise ValueError("unsupported native provenance binding schema")
+        binding = _require_mapping(native_record.get("binding"), "native provenance binding")
+        evidence = _require_mapping(records.get("runtime-evidence.json"), "runtime evidence")
+        execution = _require_mapping(evidence.get("execution"), "runtime evidence execution")
+        expected_binding = {
+            "incident_id": manifest.get("incident_id"),
+            "execution_id": execution.get("execution_id"),
+            "runtime_id": execution.get("runtime_id"),
+            "epoch": execution.get("epoch"),
+        }
+        if any(binding.get(key) != value for key, value in expected_binding.items()):
+            raise ValueError("native provenance identity binding does not match runtime evidence")
+        native_json = native_record.get("manifest_json")
+        if not isinstance(native_json, str):
+            raise ValueError("native provenance manifest_json must be a string")
+        native_result = validate_native_provenance_manifest(
+            native_json,
+            incident_id=binding["incident_id"],
+            execution_id=binding["execution_id"],
+            runtime_id=binding["runtime_id"],
+            epoch=binding["epoch"],
+            expected_run_id=binding.get("run_id"),
+            expected_context_id=binding.get("context_id"),
+            expected_report_fingerprint=binding.get("report_fingerprint"),
+            expected_policy_fingerprint=binding.get("policy_fingerprint"),
+            expected_sha256=native_record.get("manifest_sha256"),
+        )
+        if native_record.get("manifest_sha256") != native_result["manifest_sha256"]:
+            raise ValueError("native provenance digest mismatch")
 
     key_record = json.loads((bundle_dir / "public-key.json").read_text(encoding="utf-8"))
     receipt = json.loads(
@@ -370,4 +455,15 @@ def verify_incident_bundle(
         "incident_id": manifest["incident_id"],
         "authenticity": "trusted-anchor" if anchored else "bundle-key-integrity-only",
         "evidence_contract": "validated",
+        "native_provenance": (
+            {
+                "integrity": native_result["integrity"],
+                "claim_verification": native_result["claim_verification"],
+                "claim_truth": native_result["claim_truth"],
+                "runtime_enforcement": native_result["runtime_enforcement"],
+                "manifest_sha256": native_result["manifest_sha256"],
+            }
+            if native_result is not None
+            else "not_provided"
+        ),
     }

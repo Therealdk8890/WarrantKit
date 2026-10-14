@@ -344,3 +344,71 @@ def test_incident_bundle_rejects_active_warrant_with_revocation_timestamp(tmp_pa
             external_proof=records["external_proof"],
             provenance=records["provenance"],
         )
+
+
+
+def test_native_provenance_is_signed_and_verified(tmp_path: Path) -> None:
+    from test_native_provenance import RUN_ID, _manifest
+
+    records = _valid_records()
+    native_manifest = _manifest()
+    native_json = json.dumps(
+        native_manifest, sort_keys=True, indent=2, separators=(",", " : ")
+    )
+    bundle = tmp_path / "native-incident"
+    write_incident_bundle(
+        bundle,
+        incident_id=records["incident_id"],
+        authority=records["authority"],
+        containment=records["containment"],
+        runtime_evidence=records["runtime_evidence"],
+        external_proof=records["external_proof"],
+        provenance=records["provenance"],
+        native_provenance={
+            "manifest_json": native_json,
+            "run_id": RUN_ID,
+            "context_id": "claimproof",
+            "report_fingerprint": native_manifest["reportFingerprint"],
+            "policy_fingerprint": native_manifest["policyFingerprint"],
+        },
+    )
+
+    manifest = json.loads((bundle / "manifest.json").read_text(encoding="utf-8"))
+    assert "native-provenance.json" in manifest["files"]
+    result = verify_incident_bundle(bundle)
+    assert result["native_provenance"]["integrity"] == "validated"
+    assert result["native_provenance"]["claim_truth"] == "not_established"
+    assert result["native_provenance"]["runtime_enforcement"] == "not_established_by_provenance"
+
+
+def test_native_provenance_binding_tamper_fails_bundle_verification(tmp_path: Path) -> None:
+    from test_native_provenance import RUN_ID, _manifest
+
+    records = _valid_records()
+    native_manifest = _manifest()
+    native_json = json.dumps(
+        native_manifest, sort_keys=True, indent=2, separators=(",", " : ")
+    )
+    bundle = tmp_path / "native-incident"
+    write_incident_bundle(
+        bundle,
+        incident_id=records["incident_id"],
+        authority=records["authority"],
+        containment=records["containment"],
+        runtime_evidence=records["runtime_evidence"],
+        external_proof=records["external_proof"],
+        provenance=records["provenance"],
+        native_provenance={
+            "manifest_json": native_json,
+            "run_id": RUN_ID,
+            "context_id": "claimproof",
+            "report_fingerprint": native_manifest["reportFingerprint"],
+            "policy_fingerprint": native_manifest["policyFingerprint"],
+        },
+    )
+    binding_path = bundle / "native-provenance.json"
+    binding = json.loads(binding_path.read_text(encoding="utf-8"))
+    binding["binding"]["epoch"] += 1
+    binding_path.write_text(json.dumps(binding) + "\\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="bundle file digest mismatch"):
+        verify_incident_bundle(bundle)
