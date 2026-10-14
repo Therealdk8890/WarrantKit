@@ -49,6 +49,15 @@ def _canonical_json(value: Any) -> bytes:
     return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 
 
+def _verify_and_trace(document: str, evidence: list[EvidencePassage], policy: VerificationPolicy):
+    # This controls test nondeterminism only; it is not a runtime security boundary.
+    # A fresh sandbox with the same seed should produce identical verifier/trace artifacts.
+    with hermetic.sandbox(seed=42, network="block"):
+        report = ClaimVerifier(policy).verify_document(document, evidence, created_at=0.0)
+        trace = ProvenanceExporter().trace(report, policy)
+    return report, trace
+
+
 def run(output_dir: Path) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -62,11 +71,12 @@ def run(output_dir: Path) -> dict[str, Any]:
         )
     ]
     policy = VerificationPolicy()
-    # This controls test nondeterminism only; it is not a runtime security boundary.
-    # Fixed seed + blocked network makes the verifier/trace path repeatable offline.
-    with hermetic.sandbox(seed=42, network="block"):
-        report = ClaimVerifier(policy).verify_document(document, evidence, created_at=0.0)
-        trace = ProvenanceExporter().trace(report, policy)
+    report, trace = _verify_and_trace(document, evidence, policy)
+    replay_report, replay_trace = _verify_and_trace(document, evidence, policy)
+    if report_fingerprint(report) != report_fingerprint(replay_report):
+        raise RuntimeError("ClaimProofKit report fingerprint changed across seeded replay")
+    if trace.manifest_json() != replay_trace.manifest_json():
+        raise RuntimeError("ClaimProofKit provenance trace changed across seeded replay")
 
     report_document = {
         "schema_version": "warrantkit.claimproofkit-report/v1",
@@ -193,6 +203,7 @@ def run(output_dir: Path) -> dict[str, Any]:
     manifest_path = output_dir / "platform-proof-manifest.json"
     manifest_path.write_bytes(_canonical_json(manifest))
 
+    print("Hermetic deterministic replay: PASS (report fingerprint and trace bytes match)")
     print(f"ClaimProofKit verifier executed: {'PASS' if report.is_safe_to_publish else 'BLOCKED'}")
     print(f"Exact artifact digest checks: {'PASS' if all(item['digest_matches_exact_bytes'] for item in artifact_results) else 'FAIL'}")
     print(f"ClaimProofKit trace exported: {trace_path}")
