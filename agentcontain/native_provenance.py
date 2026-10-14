@@ -88,6 +88,7 @@ def validate_native_provenance_manifest(
         raise NativeProvenanceError("native provenance edges must be a list")
     event_ids: set[str] = set()
     event_types: dict[str, str] = {}
+    event_payloads: dict[str, dict[str, Any]] = {}
     run_ids: set[str] = set()
     event_contexts: set[str] = set()
     sequences: list[int] = []
@@ -114,7 +115,11 @@ def validate_native_provenance_manifest(
         if event_id in event_ids:
             raise NativeProvenanceError("duplicate native provenance event ID")
         event_ids.add(event_id)
-        event_types[event_id] = type_identifier if isinstance((type_identifier := payload.get("typeIdentifier")), str) else ""
+        type_identifier = payload.get("typeIdentifier")
+        if type_identifier not in {"cpk_claim_extracted", "cpk_claim_verified", "cpk_report_finalized"}:
+            raise NativeProvenanceError("unsupported native provenance event type")
+        event_types[event_id] = type_identifier
+        event_payloads[event_id] = decoded_payload
         run_ids.add(run_id)
         event_contexts.add(context_id)
         if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
@@ -208,6 +213,10 @@ def validate_native_provenance_manifest(
         matches = [target for source, target, kind in edge_pairs if source == extracted_id and kind == "verifiedBy"]
         if len(matches) != 1 or matches[0] not in verified_ids:
             raise NativeProvenanceError("native provenance extracted claim lacks its verifiedBy edge")
+        extracted_fingerprint = event_payloads[extracted_id].get("fingerprint")
+        verified_fingerprint = event_payloads[matches[0]].get("claimFingerprint")
+        if not isinstance(extracted_fingerprint, str) or extracted_fingerprint != verified_fingerprint:
+            raise NativeProvenanceError("extracted and verified claim fingerprints differ")
     for verified_id in verified_ids:
         if (verified_id, finalized_id, "derivedFrom") not in edge_pairs:
             raise NativeProvenanceError("native provenance verified claim lacks its report lineage edge")
