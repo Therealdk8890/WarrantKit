@@ -29,6 +29,7 @@ from .fleet_status import FleetPolicyStatus, fleet_policy_status
 from .fleet_status_history import FleetPolicyStatusHistory, FleetPolicyStatusSnapshot
 from .identity import ExecutionIdentity
 from .incident import IncidentStatus, IncidentSummary
+from .incident_bundle import verify_incident_bundle, write_incident_bundle
 from .operator import EvidenceTimelineEvent, OperatorIncidentView
 from .policy import Policy
 from .policy_assignment import AssignmentState, PolicyAssignment, PolicyAssignmentRegistry
@@ -102,6 +103,8 @@ __all__ = [
     "ExecutionIdentity",
     "IncidentStatus",
     "IncidentSummary",
+    "verify_incident_bundle",
+    "write_incident_bundle",
     "EvidenceTimelineEvent",
     "OperatorIncidentView",
     "LifecycleState",
