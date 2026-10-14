@@ -17,7 +17,7 @@ This document separates what exists today from the next integration proof. It is
 | Warden | Read-only observation and operator-facing timeline of agent activity, with clearly scoped guardrail behavior | Become an authority issuer or silently claim visibility into events it did not observe |
 | interleave-test | Deterministically explore/replay concurrency schedules for modeled Python code | Prove all schedules or replace integration/host testing |
 | cancelscope | Cooperative cancellation and cleanup for code that reaches checkpoints or registered unblock callbacks | Replace external process termination or guarantee cancellation of uncooperative code |
-| hermetic-sandbox | Restrict execution environment and ambient resources | Replace runtime epoch fencing or host-level containment verification |
+| hermetic-sandbox | Make integration tests reproducible by controlling time/randomness/network behavior and recording/replaying nondeterminism | Serve as an agent runtime sandbox or security boundary; its own README explicitly disclaims that role |
 | pytest-flakedoctor | Diagnose nondeterministic test failures and optionally use interleave-test | Turn a flaky test's passing rerun into proof of correctness |
 
 ## What is already present
@@ -61,6 +61,7 @@ Build a reproducible, offline-first proof that uses real package APIs for the pa
 - Present conflicting observations: preserve and surface the conflict; do not silently choose the favorable source.
 - Attempt to use an evidence reference to authorize an action, release containment, or advance an epoch: reject.
 - Exercise interleavings around cancellation, epoch advancement, receipt creation and evidence ingestion; replay any discovered schedules deterministically.
+- Use hermetic-sandbox only in the test/proof harness to stabilize generated IDs/timestamps and block accidental network access; never cite it as a containment/security proof.
 - Run flaky integration tests under pytest-flakedoctor as a diagnostic aid, not as a substitute for deterministic assertions.
 
 ## Integration milestones
@@ -81,7 +82,7 @@ Bind AgentContainment runtime evidence and Warden observation artifacts to execu
 Add a small, deterministic reconciliation function that reports `verified`, `incomplete`, `tampered`, `untrusted` or `conflict` per artifact/binding. Do not use majority vote: evidence independence and trust roots matter more than source count. Keep this separate from authorization decisions.
 
 ### M5 — Regression and release proof
-Run ordinary unit tests everywhere; use interleave-test only for code compatible with its scheduler and Python floor; use pytest-flakedoctor to diagnose instability; keep privileged cgroup proof environment-gated. Publish a single command, pinned dependency versions, expected artifacts, exact claims proved, and explicit non-claims.
+Run ordinary unit tests everywhere; use hermetic-sandbox in the optional reproducibility harness to control nondeterminism and network access; use interleave-test only for code compatible with its scheduler and Python floor; use pytest-flakedoctor to diagnose instability; keep privileged cgroup proof environment-gated. Publish a single command, pinned dependency versions, expected artifacts, exact claims proved, and explicit non-claims.
 
 ## Acceptance criteria
 
