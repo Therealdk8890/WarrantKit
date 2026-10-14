@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import hashlib
+import hmac
 import re
 from typing import Any, Mapping
 
@@ -98,3 +99,20 @@ class ExternalEvidenceReference:
             relation=str(document["relation"]),
             captured_at=str(document["captured_at"]),
         )
+
+
+def verify_artifact_digest(
+    artifact: bytes,
+    reference: ExternalEvidenceReference,
+) -> bool:
+    """Check that exact artifact bytes match a reference's SHA-256 digest.
+
+    This establishes content integrity relative to the supplied reference only.
+    It does not authenticate who created the reference or prove the artifact's
+    claims true; those require separate trust and verification procedures.
+    """
+    if not isinstance(artifact, bytes):
+        raise TypeError("artifact must be bytes")
+    if not isinstance(reference, ExternalEvidenceReference):
+        raise TypeError("reference must be an ExternalEvidenceReference")
+    return hmac.compare_digest(digest_artifact(artifact), reference.digest)
