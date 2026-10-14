@@ -68,7 +68,7 @@ def validate_native_provenance_manifest(
     }
     if any(not isinstance(value, str) or not value for value in required_strings.values()):
         raise NativeProvenanceError("native provenance manifest is missing version or fingerprint fields")
-    if manifest["specVersion"] != "1":
+    if manifest["specVersion"] != "1.0":
         raise NativeProvenanceError("unsupported native provenance specification version")
     if manifest["engineName"] != "ClaimProofKit":
         raise NativeProvenanceError("native provenance engine is not ClaimProofKit")
