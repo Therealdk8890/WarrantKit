@@ -14,6 +14,8 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+
+import hermetic
 from pathlib import Path
 from typing import Any
 
@@ -60,8 +62,11 @@ def run(output_dir: Path) -> dict[str, Any]:
         )
     ]
     policy = VerificationPolicy()
-    report = ClaimVerifier(policy).verify_document(document, evidence, created_at=0.0)
-    trace = ProvenanceExporter().trace(report, policy)
+    # This controls test nondeterminism only; it is not a runtime security boundary.
+    # Fixed seed + blocked network makes the verifier/trace path repeatable offline.
+    with hermetic.sandbox(seed=42, network="block"):
+        report = ClaimVerifier(policy).verify_document(document, evidence, created_at=0.0)
+        trace = ProvenanceExporter().trace(report, policy)
 
     report_document = {
         "schema_version": "warrantkit.claimproofkit-report/v1",
@@ -94,7 +99,8 @@ def run(output_dir: Path) -> dict[str, Any]:
     report_path.write_bytes(report_bytes)
     trace_path.write_bytes(trace_bytes)
 
-    captured_at = datetime.now(timezone.utc).isoformat()
+    # The artifact is synthetic, so use a fixed capture timestamp for byte-for-byte replay.
+    captured_at = "2020-01-01T00:00:00+00:00"
     artifacts = [
         ("claimproofkit", f"claimproofkit:report:{report_document['report_fingerprint']}", "verifies", report_path, report_bytes),
         ("claimproofkit", f"claimproofkit:trace:{trace.run_fingerprint}", "derived_from", trace_path, trace_bytes),
