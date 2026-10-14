@@ -241,6 +241,8 @@ def write_incident_bundle(
             "manifest_json": native_json,
             "manifest_sha256": native_result["manifest_sha256"],
         })
+    elif (output_dir / _NATIVE_PROVENANCE_FILE).exists():
+        (output_dir / _NATIVE_PROVENANCE_FILE).unlink()
 
     signing_key_file = os.environ.get("WARRANTKIT_INCIDENT_SIGNING_KEY_FILE")
     key_id = os.environ.get("WARRANTKIT_INCIDENT_SIGNING_KEY_ID", "incident-signing-key")
