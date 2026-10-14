@@ -109,6 +109,8 @@ WarrantKit complements rather than replaces IAM, policy engines, host isolation,
 
 ## Further reading
 
+- [Incident bundle API and trust model](docs/INCIDENT_BUNDLE_API.md)
+
 - [Threat model](docs/THREAT_MODEL.md)
 - [Real-kill demo requirements and evidence interpretation](docs/REAL_KILL_DEMO.md)
 - [Trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md)
