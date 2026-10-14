@@ -57,9 +57,11 @@ class ExternalEvidenceHandoff:
             raise ValueError(f"unsupported evidence source: {self.source}")
         if isinstance(self.epoch, bool) or not isinstance(self.epoch, int) or self.epoch < 1:
             raise ValueError("epoch must be a positive integer")
-        for name, value in (("artifact_digest", self.artifact_digest), ("anchor_digest", self.anchor_digest)):
-            if value is not None and not _SHA256_RE.fullmatch(value):
-                raise ValueError(f"{name} must be a lowercase sha256:<64 hex> digest")
+        if not isinstance(self.artifact_digest, str) or not _SHA256_RE.fullmatch(self.artifact_digest):
+            raise ValueError("artifact_digest must be a lowercase sha256:<64 hex> digest")
+        if self.anchor_digest is not None:
+            if not isinstance(self.anchor_digest, str) or not _SHA256_RE.fullmatch(self.anchor_digest):
+                raise ValueError("anchor_digest must be a lowercase sha256:<64 hex> digest")
         if self.anchor_digest is not None and self.anchor_ref is None:
             raise ValueError("anchor_digest requires anchor_ref")
 
