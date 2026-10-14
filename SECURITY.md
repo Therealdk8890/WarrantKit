@@ -77,7 +77,9 @@ The no-root demonstration is intentionally simulated and must not be interpreted
 
 ## Reporting a vulnerability
 
-Please report suspected security vulnerabilities privately to the project maintainers rather than opening a public issue with exploit details.
+Please do not disclose suspected vulnerabilities in public issues, pull requests, or discussions.
+
+Use GitHub's private vulnerability reporting feature from this repository's **Security** tab if it is available. If private reporting is not enabled, contact the repository maintainer through their GitHub profile to arrange a private report.
 
 Include, where practical:
 
