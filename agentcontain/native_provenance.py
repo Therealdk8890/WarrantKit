@@ -90,6 +90,8 @@ def validate_native_provenance_manifest(
     run_ids: set[str] = set()
     event_contexts: set[str] = set()
     sequences: list[int] = []
+    claim_verdicts: list[dict[str, Any]] = []
+    finalized_payloads: list[dict[str, Any]] = []
     fingerprint = hashlib.sha1()
     for event in events:
         if not isinstance(event, dict):
@@ -128,9 +130,15 @@ def validate_native_provenance_manifest(
         if not isinstance(raw_json, str):
             raise NativeProvenanceError("native provenance event rawJSON must be a string")
         try:
-            json.loads(raw_json)
+            decoded_payload = json.loads(raw_json)
         except json.JSONDecodeError as exc:
             raise NativeProvenanceError("native provenance event rawJSON is invalid") from exc
+        if not isinstance(decoded_payload, dict):
+            raise NativeProvenanceError("native provenance event rawJSON must decode to an object")
+        if type_identifier == "cpk_claim_verified":
+            claim_verdicts.append(decoded_payload)
+        elif type_identifier == "cpk_report_finalized":
+            finalized_payloads.append(decoded_payload)
         fingerprint.update(f"{type_identifier}:{engine_name}|".encode("utf-8"))
     if run_ids != {expected_run_id}:
         raise NativeProvenanceError("native provenance run ID does not match incident binding")
@@ -140,6 +148,35 @@ def validate_native_provenance_manifest(
         raise NativeProvenanceError("native provenance event sequence is not contiguous")
     if fingerprint.hexdigest() != manifest["runFingerprint"]:
         raise NativeProvenanceError("native provenance run fingerprint mismatch")
+    if len(finalized_payloads) != 1:
+        raise NativeProvenanceError("native provenance must contain exactly one finalized report event")
+    finalized = finalized_payloads[0]
+    if finalized.get("reportFingerprint") != manifest["reportFingerprint"]:
+        raise NativeProvenanceError("finalized report fingerprint does not match manifest")
+    if finalized.get("policyFingerprint") != manifest["policyFingerprint"]:
+        raise NativeProvenanceError("finalized policy fingerprint does not match manifest")
+    if finalized.get("specVersion") != manifest["specVersion"]:
+        raise NativeProvenanceError("finalized report specification version mismatch")
+    signature = ""
+    approved_statuses = {"directlySupported", "supportedByInference"}
+    for verdict in claim_verdicts:
+        claim_fingerprint = verdict.get("claimFingerprint")
+        status = verdict.get("status")
+        if not isinstance(claim_fingerprint, str) or not claim_fingerprint:
+            raise NativeProvenanceError("ClaimProofKit verdict is missing claim fingerprint")
+        if not isinstance(status, str) or not status:
+            raise NativeProvenanceError("ClaimProofKit verdict is missing status")
+        signature += f"{claim_fingerprint}:{status}|"
+    computed_report_fingerprint = hashlib.sha256(
+        ("cpk:v1:report:" + signature).encode("utf-8")
+    ).hexdigest()
+    if computed_report_fingerprint != manifest["reportFingerprint"]:
+        raise NativeProvenanceError("ClaimProofKit verdicts do not match report fingerprint")
+    safe_to_publish = bool(claim_verdicts) and all(
+        verdict.get("status") in approved_statuses for verdict in claim_verdicts
+    )
+    if finalized.get("safeToPublish") is not safe_to_publish:
+        raise NativeProvenanceError("ClaimProofKit verdict statuses conflict with safeToPublish")
 
     for edge in edges:
         if not isinstance(edge, dict):
@@ -163,6 +200,7 @@ def validate_native_provenance_manifest(
         "run_fingerprint": manifest["runFingerprint"],
         "report_fingerprint": manifest["reportFingerprint"],
         "policy_fingerprint": manifest["policyFingerprint"],
+        "claim_verification": "SUPPORTED" if safe_to_publish else "BLOCKED",
         "manifest_sha256": digest,
         "integrity": "validated",
         "claim_truth": "not_established",
