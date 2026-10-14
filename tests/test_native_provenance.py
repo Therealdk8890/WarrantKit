@@ -12,8 +12,8 @@ from agentcontain.native_provenance import (
 def _manifest():
     events = [
         {
-            "id": "E1",
-            "runID": "RUN-1",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "runID": "00000000-0000-0000-0000-000000000099",
             "contextID": "claimproof",
             "engineName": "ClaimProofKit",
             "schemaVersion": 1,
@@ -21,8 +21,8 @@ def _manifest():
             "payload": {"typeIdentifier": "cpk_claim_verified", "priorityValue": 3, "rawJSON": "{}"},
         },
         {
-            "id": "E2",
-            "runID": "RUN-1",
+            "id": "00000000-0000-0000-0000-000000000002",
+            "runID": "00000000-0000-0000-0000-000000000099",
             "contextID": "claimproof",
             "engineName": "ClaimProofKit",
             "schemaVersion": 1,
@@ -42,7 +42,7 @@ def _manifest():
         "reportFingerprint": "sha256:report",
         "policyFingerprint": "sha256:policy",
         "events": events,
-        "edges": [{"sourceID": "E1", "targetID": "E2", "type": "derivedFrom"}],
+        "edges": [{"sourceID": "00000000-0000-0000-0000-000000000001", "targetID": "00000000-0000-0000-0000-000000000002", "type": "derivedFrom"}],
     }
     return value
 
@@ -54,7 +54,7 @@ def _validate(manifest, **overrides):
         "execution_id": "EXEC-1",
         "runtime_id": "RUNTIME-1",
         "epoch": 4,
-        "expected_run_id": "RUN-1",
+        "expected_run_id": "00000000-0000-0000-0000-000000000099",
         "expected_context_id": "claimproof",
         "expected_report_fingerprint": "sha256:report",
         "expected_policy_fingerprint": "sha256:policy",
@@ -74,7 +74,7 @@ def test_valid_native_manifest_is_bound_without_claiming_truth():
 
 def test_rejects_run_id_mismatch():
     with pytest.raises(NativeProvenanceError, match="run ID"):
-        _validate(_manifest(), expected_run_id="OTHER-RUN")
+        _validate(_manifest(), expected_run_id="00000000-0000-0000-0000-000000000098")
 
 
 def test_rejects_report_fingerprint_mismatch():
@@ -91,7 +91,7 @@ def test_rejects_tampered_run_fingerprint():
 
 def test_rejects_edges_to_unknown_events():
     manifest = _manifest()
-    manifest["edges"][0]["targetID"] = "UNKNOWN"
+    manifest["edges"][0]["targetID"] = "00000000-0000-0000-0000-000000000098"
     with pytest.raises(NativeProvenanceError, match="unknown event"):
         _validate(manifest)
 
