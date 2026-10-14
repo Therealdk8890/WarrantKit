@@ -6,6 +6,23 @@
 
 WarrantKit binds execution authority to accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, retained pre-containment authority is fenced out. WarrantKit coordinates the authority lifecycle; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides external runtime enforcement.
 
+## Current implementation status
+
+The current OSS implementation is a local authority-lifecycle and runtime-enforcement integration, not a hosted security platform.
+
+| Capability | Current state | Important boundary |
+|---|---|---|
+| Warrant admission and runtime-epoch fencing | Implemented and CI-tested | A Warrant tied to an older runtime epoch is rejected; epoch fencing does not undo side effects already completed. |
+| Controller-owned ActionGateway enforcement | Implemented and covered by the framework boundary proof | The adapter checks the Warrant before invoking the gateway; the gateway independently enforces its controller-owned execution lease. A serialized Warrant is not a gateway bearer credential. |
+| Framework adapters | LangChain and CrewAI adapters; OpenAI Agents SDK local function-tool adapter | Do not infer support for hosted tools, arbitrary external side-effect paths, or async-native execution. |
+| Real process containment | Linux cgroup-v2 proof implemented and exercised in privileged CI | Requires Linux and suitable root/delegated cgroup privileges. It is not a universal host-isolation guarantee. |
+| Evidence and incident bundles | Bundle writer, standalone verifier, and optional Ed25519-authenticated Warrant/receipt artifacts | A trusted public key must be provisioned independently. Internal consistency or a valid signature does not prove the underlying claim is true. |
+| ClaimProofKit provenance integration | CI test uses ClaimProofKit's public APIs to create a claim report and provenance trace, then round-trips it through a signed WarrantKit incident bundle | The test validates provenance integrity and records the verifier verdict separately; claim truth and runtime enforcement are not established by provenance alone. |
+| Hosted commercial control plane | Not part of this OSS repository's shipped boundary | The separate WarrantKit Commercial API still lacks a completed authenticated-principal/tenant-authorization boundary; its incident-ingestion endpoint is intentionally disabled. |
+
+The main-branch CI suite includes unit/adapter tests, the framework authority-boundary proof, the privileged Linux cgroup-v2 workload proof, clean-install/demo coverage, and a gateway benchmark smoke test. See [implementation status and proof scope](docs/INTEGRATIONS_AND_PROOFS.md#implementation-status) for the detailed test and environment boundaries.
+
+
 ## Start with the framework-to-gateway proof
 
 This deterministic proof uses a real LangChain tool and AgentContainment's ActionGateway, without an LLM, network access, or real credentials. It shows an allowed tool side effect before containment, then proves the retained Warrant is rejected before a second side effect can occur.
