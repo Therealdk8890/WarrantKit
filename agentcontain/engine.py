@@ -9,6 +9,7 @@ from typing import Protocol
 from uuid import uuid4
 
 from .evidence import EvidenceEnvelope, validate_runtime_pinned_binding
+from .egress_binding import EgressBinding, UnsupportedEgressBinding, bind_allowed_egress
 from .fleet import FleetRegistry
 from .identity import ExecutionIdentity
 from .policy import Policy
@@ -104,6 +105,7 @@ class Admission:
     policy: PolicyBundle
     warrant: Warrant | None = None
     warrant_attestation: dict | None = None
+    egress_binding: EgressBinding | None = None
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
 
@@ -225,6 +227,22 @@ def admit(
         if not callable(sign_warrant):
             raise TypeError("warrant_signer must provide sign_warrant(warrant)")
         warrant_attestation = sign_warrant(warrant).to_dict()
+    egress_binding = None
+    if bundle.policy.allowed_egress:
+        if identity.runtime_id is None:
+            raise UnsupportedEgressBinding(
+                "non-empty allowed_egress requires a runtime_id and an explicitly "
+                "capable provider; refusing admission without enforceable binding"
+            )
+        egress_binding = bind_allowed_egress(
+            engine,
+            policy_id=bundle.policy_id,
+            policy_digest=bundle.policy_digest,
+            agent_id=identity.agent_id,
+            runtime_id=identity.runtime_id,
+            epoch=identity.epoch,
+            allowed_egress=bundle.policy.allowed_egress,
+        )
     machine = PlatformStateMachine(identity)
     machine.admit(
         details={"warrant_id": warrant.warrant_id} if warrant is not None else None
@@ -236,6 +254,7 @@ def admit(
         policy=bundle,
         warrant=warrant,
         warrant_attestation=warrant_attestation,
+        egress_binding=egress_binding,
     )
 
 @_synchronized
