@@ -157,9 +157,6 @@ def run_stale_warrant_demo() -> int:
 
     initial_epoch = admission.engine.controller.runtime.epoch
     verify_retained()
-    print("WarrantKit — stale-Warrant replay proof")
-    print("---------------------------------------")
-    print(f"Runtime epoch {initial_epoch}: retained Warrant ACCEPTED")
 
     contain(admission)
     current_epoch = admission.engine.controller.runtime.epoch
@@ -168,19 +165,22 @@ def run_stale_warrant_demo() -> int:
             "containment did not advance the controller runtime epoch; "
             "this environment cannot demonstrate epoch fencing"
         )
-    print(f"Containment advanced runtime epoch to {current_epoch}")
 
     try:
         verify_retained()
     except ValueError as exc:
         if "epoch" not in str(exc):
             raise
-        print(f"Retained pre-containment Warrant: REJECTED ({exc})")
+        rejection = str(exc)
     else:
         raise RuntimeError("FAIL: stale Warrant was accepted")
 
-    print()
-    print("This proves verifier rejection against the controller's runtime epoch.")
-    print("It does not prove kernel-level workload termination or isolate the")
-    print("controller from the verifier; use the privileged Linux proof for that.")
+    print(
+        f"PASS: retained Warrant ACCEPTED at epoch {initial_epoch}; "
+        f"containment advanced epoch to {current_epoch}; replay REJECTED ({rejection})."
+    )
+    print(
+        "SCOPE: in-process verifier/controller; no kernel-kill proof or independent "
+        "evidence claim. Use the privileged Linux proof for those."
+    )
     return 0
