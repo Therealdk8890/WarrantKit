@@ -37,7 +37,7 @@ def _manifest(status="directlySupported", safe_to_publish=True):
     ).hexdigest()
     events = [
         _event(EVENT_EXTRACTED, 0, "cpk_claim_extracted", {
-            "claimFingerprint": "claim-fp",
+            "fingerprint": "claim-fp",
             "text": "example claim",
         }),
         _event(EVENT_VERIFIED, 1, "cpk_claim_verified", {
@@ -187,4 +187,16 @@ def test_rejects_missing_claim_lineage_edge():
     manifest = _manifest()
     manifest["edges"].pop(0)
     with pytest.raises(NativeProvenanceError, match="verifiedBy edge"):
+        _validate(manifest)
+
+
+
+def test_rejects_extracted_claim_fingerprint_mismatch():
+    manifest = _manifest()
+    extracted = json.loads(manifest["events"][0]["payload"]["rawJSON"])
+    extracted["fingerprint"] = "different-claim"
+    manifest["events"][0]["payload"]["rawJSON"] = json.dumps(
+        extracted, sort_keys=True, separators=(",", ":")
+    )
+    with pytest.raises(NativeProvenanceError, match="fingerprints differ"):
         _validate(manifest)
