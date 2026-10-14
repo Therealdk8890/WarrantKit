@@ -161,3 +161,53 @@ def test_changing_a_reference_changes_the_canonical_envelope() -> None:
     changed = _envelope(tuple(references)).to_json()
 
     assert changed != original
+
+
+def test_artifact_digest_verifies_exact_bytes() -> None:
+    from agentcontain.external_evidence import digest_artifact, verify_artifact_digest
+
+    artifact = b'{"event":"containment_verified","epoch":4}'
+    reference = _reference(digest=digest_artifact(artifact))
+
+    assert verify_artifact_digest(artifact, reference) is True
+
+
+def test_artifact_digest_rejects_mutated_bytes() -> None:
+    from agentcontain.external_evidence import digest_artifact, verify_artifact_digest
+
+    artifact = b'{"event":"containment_verified","epoch":4}'
+    reference = _reference(digest=digest_artifact(artifact))
+
+    assert verify_artifact_digest(artifact + b" ", reference) is False
+
+
+def test_recomputed_digest_does_not_establish_authenticity() -> None:
+    from agentcontain.external_evidence import digest_artifact, verify_artifact_digest
+
+    original = b'{"status":"verified"}'
+    changed = b'{"status":"verified","source":"attacker"}'
+    attacker_reference = _reference(digest=digest_artifact(changed))
+
+    # A digest can match attacker-chosen bytes. Authenticity needs a separate
+    # trust anchor; this helper intentionally answers only the integrity question.
+    assert verify_artifact_digest(changed, attacker_reference) is True
+    assert verify_artifact_digest(original, attacker_reference) is False
+
+
+def test_artifact_digest_rejects_wrong_input_types() -> None:
+    from agentcontain.external_evidence import verify_artifact_digest
+
+    reference = _reference()
+    try:
+        verify_artifact_digest("not bytes", reference)  # type: ignore[arg-type]
+    except TypeError as exc:
+        assert "bytes" in str(exc)
+    else:
+        raise AssertionError("non-bytes artifact was accepted")
+
+    try:
+        verify_artifact_digest(b"artifact", object())  # type: ignore[arg-type]
+    except TypeError as exc:
+        assert "ExternalEvidenceReference" in str(exc)
+    else:
+        raise AssertionError("wrong reference type was accepted")
