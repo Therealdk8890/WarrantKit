@@ -1,3 +1,5 @@
+import pytest
+
 from agentcontain.external_handoff import (
     CorrelationState,
     ExternalEvidenceHandoff,
@@ -25,6 +27,19 @@ def test_handoff_roundtrips() -> None:
     handoff = _handoff()
 
     assert ExternalEvidenceHandoff.from_dict(handoff.to_dict()) == handoff
+
+
+
+@pytest.mark.parametrize("digest", [None, "", "sha256:abc", "SHA256:" + "a" * 64, 123])
+def test_artifact_digest_is_required_and_strictly_validated(digest) -> None:
+    with pytest.raises(ValueError, match="artifact_digest"):
+        _handoff(artifact_digest=digest)
+
+
+@pytest.mark.parametrize("digest", ["", "sha256:abc", "SHA256:" + "a" * 64, 123])
+def test_present_anchor_digest_is_strictly_validated(digest) -> None:
+    with pytest.raises(ValueError, match="anchor_digest"):
+        _handoff(anchor_digest=digest)
 
 
 def test_matching_anchor_is_correlated_but_not_verified() -> None:
