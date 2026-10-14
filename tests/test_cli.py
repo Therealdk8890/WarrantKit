@@ -45,7 +45,7 @@ def test_cli_json_run_rejects_unsupported_egress(monkeypatch, capsys) -> None:
     ]) == 1
 
     captured = capsys.readouterr()
-    assert "destination_allowlist.v1" in captured.err
+    assert "requires a runtime_id" in captured.err
     assert captured.out == ""
 
 
