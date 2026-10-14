@@ -206,14 +206,20 @@ def validate_native_provenance_manifest(
     if len(finalized_ids) != 1:
         raise NativeProvenanceError("native provenance must contain exactly one finalized report event")
     finalized_id = next(iter(finalized_ids))
+    matched_verified_ids: set[str] = set()
     for extracted_id in extracted_ids:
         matches = [target for source, target, kind in edge_pairs if source == extracted_id and kind == "verifiedBy"]
         if len(matches) != 1 or matches[0] not in verified_ids:
             raise NativeProvenanceError("native provenance extracted claim lacks its verifiedBy edge")
+        if matches[0] in matched_verified_ids:
+            raise NativeProvenanceError("multiple extracted claims link to the same verified claim")
+        matched_verified_ids.add(matches[0])
         extracted_fingerprint = event_payloads[extracted_id].get("fingerprint")
         verified_fingerprint = event_payloads[matches[0]].get("claimFingerprint")
         if not isinstance(extracted_fingerprint, str) or extracted_fingerprint != verified_fingerprint:
             raise NativeProvenanceError("extracted and verified claim fingerprints differ")
+    if matched_verified_ids != verified_ids:
+        raise NativeProvenanceError("native provenance contains an unlinked verified claim")
     for verified_id in verified_ids:
         if (verified_id, finalized_id, "derivedFrom") not in edge_pairs:
             raise NativeProvenanceError("native provenance verified claim lacks its report lineage edge")
