@@ -87,6 +87,28 @@ def test_valid_native_manifest_is_bound_without_claiming_truth():
     assert result["claim_verification"] == "SUPPORTED"
 
 
+def test_unsupported_verdict_cannot_be_relabelled_as_supported():
+    manifest = _manifest()
+    events = manifest["events"]
+    events[0]["payload"]["rawJSON"] = json.dumps({
+        "claimFingerprint": "claim-fp",
+        "status": "unsupported",
+        "confidence": 0.0,
+        "evidenceFingerprints": [],
+    }, sort_keys=True, separators=(",", ":"))
+    report_fp = hashlib.sha256(b"cpk:v1:report:claim-fp:unsupported|").hexdigest()
+    manifest["reportFingerprint"] = report_fp
+    events[1]["payload"]["rawJSON"] = json.dumps({
+        "reportFingerprint": report_fp,
+        "policyFingerprint": "policy-fp",
+        "safeToPublish": True,
+        "specVersion": "1.0",
+        "statusCounts": {"unsupported": 1},
+    }, sort_keys=True, separators=(",", ":"))
+    with pytest.raises(NativeProvenanceError, match="safeToPublish"):
+        _validate(manifest, expected_report_fingerprint=report_fp)
+
+
 def test_rejects_run_id_mismatch():
     with pytest.raises(NativeProvenanceError, match="run ID"):
         _validate(_manifest(), expected_run_id="00000000-0000-0000-0000-000000000098")
