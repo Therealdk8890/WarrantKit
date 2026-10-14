@@ -200,3 +200,50 @@ def test_rejects_extracted_claim_fingerprint_mismatch():
     )
     with pytest.raises(NativeProvenanceError, match="fingerprints differ"):
         _validate(manifest)
+
+
+
+def test_rejects_two_extracted_claims_linked_to_one_verified_claim():
+    manifest = _manifest()
+    extracted = dict(manifest["events"][0])
+    extracted["id"] = "00000000-0000-0000-0000-000000000004"
+    extracted["sequence"] = 3
+    verified = dict(manifest["events"][1])
+    verified["id"] = "00000000-0000-0000-0000-000000000005"
+    verified["sequence"] = 4
+    manifest["events"].extend([extracted, verified])
+
+    finalized = json.loads(manifest["events"][2]["payload"]["rawJSON"])
+    report_fp = hashlib.sha256(
+        b"cpk:v1:report:claim-fp:directlySupported|claim-fp:directlySupported|"
+    ).hexdigest()
+    finalized["reportFingerprint"] = report_fp
+    finalized["statusCounts"] = {"directlySupported": 2}
+    manifest["events"][2]["payload"]["rawJSON"] = json.dumps(
+        finalized, sort_keys=True, separators=(",", ":")
+    )
+    manifest["reportFingerprint"] = report_fp
+    manifest["runFingerprint"] = hashlib.sha1(
+        b"cpk_claim_extracted:ClaimProofKit|"
+        b"cpk_claim_verified:ClaimProofKit|"
+        b"cpk_report_finalized:ClaimProofKit|"
+        b"cpk_claim_extracted:ClaimProofKit|"
+        b"cpk_claim_verified:ClaimProofKit|"
+    ).hexdigest()
+    manifest["edges"].extend([
+        {
+            "sourceID": extracted["id"],
+            "targetID": manifest["events"][1]["id"],
+            "type": "verifiedBy",
+        },
+        {
+            "sourceID": verified["id"],
+            "targetID": manifest["events"][2]["id"],
+            "type": "derivedFrom",
+        },
+    ])
+    with pytest.raises(NativeProvenanceError, match="same verified claim"):
+        _validate(
+            manifest,
+            expected_report_fingerprint=report_fp,
+        )
