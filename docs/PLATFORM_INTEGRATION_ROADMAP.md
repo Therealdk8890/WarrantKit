@@ -25,14 +25,16 @@ This document separates what exists today from the next integration proof. It is
 The current WarrantKit repository has a useful foundation:
 
 - `ExternalEvidenceReference` provides a versioned, authority-neutral reference with source, reference ID, SHA-256 digest, relation and capture time.
-- `EvidenceEnvelope` v2 can carry these references, and tests cover serialization round-trips and rejection of unknown sources, relations and malformed digests.
+- `ExternalEvidenceHandoff` binds an artifact reference/digest to execution ID, Warrant ID, runtime ID and epoch; `correlate_handoff` checks identity and optional anchor consistency.
+- `compose_verification` already keeps authority validity, runtime validity, authentication, correlation, anchoring, verifier execution, conflicts and missing evidence as separate dimensions.
+- `EvidenceEnvelope` v2 can carry external references, and tests cover serialization round-trips and rejection of unknown sources, relations and malformed digests.
 - A cross-repository fixture names Warden, AgentContainment, DProvenanceKit and ClaimProofKit.
 - WarrantKit's README explicitly says generalized automatic correlation/reconciliation and conflict objects are **not yet shipped**.
 - AgentContainment remains a direct runtime dependency and the side-effect enforcement boundary.
 - ClaimProofKit Python can verify a document against supplied evidence and export a DProvenanceKit-compatible trace manifest. DProvenanceKit Python has its own recording/query/diff/gate APIs.
 - interleave-test and pytest-flakedoctor already have a natural role in regression testing the security invariants; cancelscope is cooperative cancellation, not hard containment.
 
-The existing fixture is a contract/serialization fixture. Its reference IDs and digests are illustrative; it does not demonstrate that the referenced artifacts were produced by the named systems, that artifact bytes were retrieved and hashed, or that cross-system conflicts are detected. A digest reference binds bytes only when the consumer has the bytes and recomputes the digest. A source label and a self-reported status are not an independent trust anchor.
+The existing fixture is a contract/serialization fixture. Its reference IDs and digests are illustrative; it does not demonstrate that the referenced artifacts were produced by the named systems, that artifact bytes were retrieved and hashed, or that real source adapters feed the handoff/correlation functions. The handoff and verification-composition primitives are present, but an actual artifact-byte check and an end-to-end source-to-reconciliation proof remain gaps. A digest reference binds bytes only when the consumer has the bytes and recomputes the digest. A source label and a self-reported status are not an independent trust anchor.
 
 ## First end-to-end proof
 
@@ -67,7 +69,7 @@ Build a reproducible, offline-first proof that uses real package APIs for the pa
 Inventory public APIs, artifact formats, version constraints, trust assumptions, and current CI coverage. Keep a gap list distinguishing implemented, fixture-only, documented-only and unverified behavior.
 
 ### M1 — Artifact-bound evidence references
-Add a helper that reads exact artifact bytes, computes the digest, and constructs references. Add a verifier that accepts bytes and a reference and rejects digest mismatch. Avoid network retrieval and implicit trust in the first version.
+In progress: PR #159 adds `verify_artifact_digest(artifact, reference)` and tests for exact-byte matching, mutation rejection, and the integrity/authenticity distinction. Next, connect this primitive to the existing `ExternalEvidenceHandoff` and integration proof. Avoid network retrieval and implicit trust in the first version.
 
 ### M2 — ClaimProofKit + DProvenanceKit adapter
 Use the published ClaimProofKit API to generate a real report and trace. Validate stable fields and pin the verifier/spec version. Validate the DPK bridge contract; explicitly label what was exported versus stored or independently verified.
@@ -100,4 +102,4 @@ Keep the WarrantKit core lean. Add optional extras for cross-project adapters on
 
 ## Immediate next implementation task
 
-Implement M1 first: artifact-byte hashing/verification tests around `ExternalEvidenceReference`. This turns the existing reference schema from a shape-only contract into a tested integrity binding without overclaiming authenticity. Then build the real ClaimProofKit → trace export → WarrantKit reference path on top of that invariant.
+Finish review and CI for PR #159, then wire exact artifact-byte verification into the existing handoff flow. Next build the real ClaimProofKit → trace export → WarrantKit reference path and verify which DProvenanceKit operations are truly exercised, rather than treating a compatible manifest as proof of DPK ingestion.
