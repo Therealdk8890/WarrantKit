@@ -30,6 +30,20 @@ def _manifest():
             "payload": {"typeIdentifier": "cpk_report_finalized", "priorityValue": 3, "rawJSON": "{}"},
         },
     ]
+    report_fp = hashlib.sha256(b"cpk:v1:report:claim-fp:directlySupported|").hexdigest()
+    events[0]["payload"]["rawJSON"] = json.dumps({
+        "claimFingerprint": "claim-fp",
+        "status": "directlySupported",
+        "confidence": 0.99,
+        "evidenceFingerprints": [],
+    }, sort_keys=True, separators=(",", ":"))
+    events[1]["payload"]["rawJSON"] = json.dumps({
+        "reportFingerprint": report_fp,
+        "policyFingerprint": "policy-fp",
+        "safeToPublish": True,
+        "specVersion": "1.0",
+        "statusCounts": {"directlySupported": 1},
+    }, sort_keys=True, separators=(",", ":"))
     run_fp = hashlib.sha1(
         b"cpk_claim_verified:ClaimProofKit|cpk_report_finalized:ClaimProofKit|"
     ).hexdigest()
@@ -39,8 +53,8 @@ def _manifest():
         "engineName": "ClaimProofKit",
         "contextID": "claimproof",
         "runFingerprint": run_fp,
-        "reportFingerprint": "sha256:report",
-        "policyFingerprint": "sha256:policy",
+        "reportFingerprint": report_fp,
+        "policyFingerprint": "policy-fp",
         "events": events,
         "edges": [{"sourceID": "00000000-0000-0000-0000-000000000001", "targetID": "00000000-0000-0000-0000-000000000002", "type": "derivedFrom"}],
     }
@@ -56,8 +70,8 @@ def _validate(manifest, **overrides):
         "epoch": 4,
         "expected_run_id": "00000000-0000-0000-0000-000000000099",
         "expected_context_id": "claimproof",
-        "expected_report_fingerprint": "sha256:report",
-        "expected_policy_fingerprint": "sha256:policy",
+        "expected_report_fingerprint": hashlib.sha256(b"cpk:v1:report:claim-fp:directlySupported|").hexdigest(),
+        "expected_policy_fingerprint": "policy-fp",
     }
     args.update(overrides)
     return validate_native_provenance_manifest(raw, **args)
@@ -70,6 +84,7 @@ def test_valid_native_manifest_is_bound_without_claiming_truth():
     assert result["integrity"] == "validated"
     assert result["claim_truth"] == "not_established"
     assert result["runtime_enforcement"] == "not_established_by_provenance"
+    assert result["claim_verification"] == "SUPPORTED"
 
 
 def test_rejects_run_id_mismatch():
