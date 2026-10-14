@@ -9,45 +9,55 @@ from agentcontain.native_provenance import (
 )
 
 
-def _manifest():
-    events = [
-        {
-            "id": "00000000-0000-0000-0000-000000000001",
-            "runID": "00000000-0000-0000-0000-000000000099",
-            "contextID": "claimproof",
-            "engineName": "ClaimProofKit",
-            "schemaVersion": 1,
-            "sequence": 0,
-            "payload": {"typeIdentifier": "cpk_claim_verified", "priorityValue": 3, "rawJSON": "{}"},
+RUN_ID = "00000000-0000-0000-0000-000000000099"
+EVENT_EXTRACTED = "00000000-0000-0000-0000-000000000001"
+EVENT_VERIFIED = "00000000-0000-0000-0000-000000000002"
+EVENT_FINALIZED = "00000000-0000-0000-0000-000000000003"
+
+
+def _event(event_id, sequence, type_identifier, payload):
+    return {
+        "id": event_id,
+        "runID": RUN_ID,
+        "contextID": "claimproof",
+        "engineName": "ClaimProofKit",
+        "schemaVersion": 1,
+        "sequence": sequence,
+        "payload": {
+            "typeIdentifier": type_identifier,
+            "priorityValue": 3,
+            "rawJSON": json.dumps(payload, sort_keys=True, separators=(",", ":")),
         },
-        {
-            "id": "00000000-0000-0000-0000-000000000002",
-            "runID": "00000000-0000-0000-0000-000000000099",
-            "contextID": "claimproof",
-            "engineName": "ClaimProofKit",
-            "schemaVersion": 1,
-            "sequence": 1,
-            "payload": {"typeIdentifier": "cpk_report_finalized", "priorityValue": 3, "rawJSON": "{}"},
-        },
-    ]
-    report_fp = hashlib.sha256(b"cpk:v1:report:claim-fp:directlySupported|").hexdigest()
-    events[0]["payload"]["rawJSON"] = json.dumps({
-        "claimFingerprint": "claim-fp",
-        "status": "directlySupported",
-        "confidence": 0.99,
-        "evidenceFingerprints": [],
-    }, sort_keys=True, separators=(",", ":"))
-    events[1]["payload"]["rawJSON"] = json.dumps({
-        "reportFingerprint": report_fp,
-        "policyFingerprint": "policy-fp",
-        "safeToPublish": True,
-        "specVersion": "1.0",
-        "statusCounts": {"directlySupported": 1},
-    }, sort_keys=True, separators=(",", ":"))
-    run_fp = hashlib.sha1(
-        b"cpk_claim_verified:ClaimProofKit|cpk_report_finalized:ClaimProofKit|"
+    }
+
+
+def _manifest(status="directlySupported", safe_to_publish=True):
+    report_fp = hashlib.sha256(
+        f"cpk:v1:report:claim-fp:{status}|".encode()
     ).hexdigest()
-    value = {
+    events = [
+        _event(EVENT_EXTRACTED, 0, "cpk_claim_extracted", {
+            "claimFingerprint": "claim-fp",
+            "text": "example claim",
+        }),
+        _event(EVENT_VERIFIED, 1, "cpk_claim_verified", {
+            "claimFingerprint": "claim-fp",
+            "status": status,
+            "confidence": 0.99 if safe_to_publish else 0.0,
+            "evidenceFingerprints": [],
+        }),
+        _event(EVENT_FINALIZED, 2, "cpk_report_finalized", {
+            "reportFingerprint": report_fp,
+            "policyFingerprint": "policy-fp",
+            "safeToPublish": safe_to_publish,
+            "specVersion": "1.0",
+            "statusCounts": {status: 1},
+        }),
+    ]
+    run_fp = hashlib.sha1(
+        b"cpk_claim_extracted:ClaimProofKit|cpk_claim_verified:ClaimProofKit|cpk_report_finalized:ClaimProofKit|"
+    ).hexdigest()
+    return {
         "bridgeVersion": "1.0",
         "specVersion": "1.0",
         "engineName": "ClaimProofKit",
@@ -56,9 +66,11 @@ def _manifest():
         "reportFingerprint": report_fp,
         "policyFingerprint": "policy-fp",
         "events": events,
-        "edges": [{"sourceID": "00000000-0000-0000-0000-000000000001", "targetID": "00000000-0000-0000-0000-000000000002", "type": "derivedFrom"}],
+        "edges": [
+            {"sourceID": EVENT_EXTRACTED, "targetID": EVENT_VERIFIED, "type": "verifiedBy"},
+            {"sourceID": EVENT_VERIFIED, "targetID": EVENT_FINALIZED, "type": "derivedFrom"},
+        ],
     }
-    return value
 
 
 def _validate(manifest, **overrides):
@@ -68,9 +80,11 @@ def _validate(manifest, **overrides):
         "execution_id": "EXEC-1",
         "runtime_id": "RUNTIME-1",
         "epoch": 4,
-        "expected_run_id": "00000000-0000-0000-0000-000000000099",
+        "expected_run_id": RUN_ID,
         "expected_context_id": "claimproof",
-        "expected_report_fingerprint": hashlib.sha256(b"cpk:v1:report:claim-fp:directlySupported|").hexdigest(),
+        "expected_report_fingerprint": hashlib.sha256(
+            b"cpk:v1:report:claim-fp:directlySupported|"
+        ).hexdigest(),
         "expected_policy_fingerprint": "policy-fp",
     }
     args.update(overrides)
@@ -88,25 +102,17 @@ def test_valid_native_manifest_is_bound_without_claiming_truth():
 
 
 def test_unsupported_verdict_cannot_be_relabelled_as_supported():
-    manifest = _manifest()
-    events = manifest["events"]
-    events[0]["payload"]["rawJSON"] = json.dumps({
-        "claimFingerprint": "claim-fp",
-        "status": "unsupported",
-        "confidence": 0.0,
-        "evidenceFingerprints": [],
-    }, sort_keys=True, separators=(",", ":"))
-    report_fp = hashlib.sha256(b"cpk:v1:report:claim-fp:unsupported|").hexdigest()
-    manifest["reportFingerprint"] = report_fp
-    events[1]["payload"]["rawJSON"] = json.dumps({
-        "reportFingerprint": report_fp,
-        "policyFingerprint": "policy-fp",
-        "safeToPublish": True,
-        "specVersion": "1.0",
-        "statusCounts": {"unsupported": 1},
-    }, sort_keys=True, separators=(",", ":"))
+    manifest = _manifest(status="unsupported", safe_to_publish=False)
+    finalized = json.loads(manifest["events"][2]["payload"]["rawJSON"])
+    finalized["safeToPublish"] = True
+    manifest["events"][2]["payload"]["rawJSON"] = json.dumps(
+        finalized, sort_keys=True, separators=(",", ":")
+    )
     with pytest.raises(NativeProvenanceError, match="safeToPublish"):
-        _validate(manifest, expected_report_fingerprint=report_fp)
+        _validate(
+            manifest,
+            expected_report_fingerprint=manifest["reportFingerprint"],
+        )
 
 
 def test_rejects_run_id_mismatch():
@@ -134,8 +140,7 @@ def test_rejects_edges_to_unknown_events():
 
 
 def test_rejects_manifest_digest_mismatch():
-    manifest = _manifest()
-    raw = json.dumps(manifest, sort_keys=True, indent=2, separators=(",", " : "))
+    raw = json.dumps(_manifest(), sort_keys=True, indent=2, separators=(",", " : "))
     with pytest.raises(NativeProvenanceError, match="digest mismatch"):
         validate_native_provenance_manifest(
             raw,
@@ -143,20 +148,21 @@ def test_rejects_manifest_digest_mismatch():
             execution_id="EXEC-1",
             runtime_id="RUNTIME-1",
             epoch=4,
-            expected_run_id="RUN-1",
+            expected_run_id=RUN_ID,
             expected_context_id="claimproof",
-            expected_report_fingerprint="sha256:report",
-            expected_policy_fingerprint="sha256:policy",
+            expected_report_fingerprint=hashlib.sha256(
+                b"cpk:v1:report:claim-fp:directlySupported|"
+            ).hexdigest(),
+            expected_policy_fingerprint="policy-fp",
             expected_sha256="sha256:wrong",
         )
 
 
-
 def test_rejects_finalized_report_payload_mismatch():
     manifest = _manifest()
-    finalized = json.loads(manifest["events"][1]["payload"]["rawJSON"])
+    finalized = json.loads(manifest["events"][2]["payload"]["rawJSON"])
     finalized["reportFingerprint"] = "different"
-    manifest["events"][1]["payload"]["rawJSON"] = json.dumps(
+    manifest["events"][2]["payload"]["rawJSON"] = json.dumps(
         finalized, sort_keys=True, separators=(",", ":")
     )
     with pytest.raises(NativeProvenanceError, match="finalized report fingerprint"):
@@ -174,4 +180,11 @@ def test_rejects_invalid_event_payload_json():
     manifest = _manifest()
     manifest["events"][0]["payload"]["rawJSON"] = "{"
     with pytest.raises(NativeProvenanceError, match="rawJSON is invalid"):
+        _validate(manifest)
+
+
+def test_rejects_missing_claim_lineage_edge():
+    manifest = _manifest()
+    manifest["edges"].pop(0)
+    with pytest.raises(NativeProvenanceError, match="verifiedBy edge"):
         _validate(manifest)
