@@ -11,12 +11,11 @@ authenticated, or that a live AgentContainment runtime was contained.
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import hashlib
 import json
+from pathlib import Path
 
 import hermetic
-from pathlib import Path
 from typing import Any
 
 from claimproofkit import (
