@@ -149,3 +149,29 @@ def test_rejects_manifest_digest_mismatch():
             expected_policy_fingerprint="sha256:policy",
             expected_sha256="sha256:wrong",
         )
+
+
+
+def test_rejects_finalized_report_payload_mismatch():
+    manifest = _manifest()
+    finalized = json.loads(manifest["events"][1]["payload"]["rawJSON"])
+    finalized["reportFingerprint"] = "different"
+    manifest["events"][1]["payload"]["rawJSON"] = json.dumps(
+        finalized, sort_keys=True, separators=(",", ":")
+    )
+    with pytest.raises(NativeProvenanceError, match="finalized report fingerprint"):
+        _validate(manifest)
+
+
+def test_rejects_event_context_mismatch():
+    manifest = _manifest()
+    manifest["events"][0]["contextID"] = "other-context"
+    with pytest.raises(NativeProvenanceError, match="engine or context"):
+        _validate(manifest)
+
+
+def test_rejects_invalid_event_payload_json():
+    manifest = _manifest()
+    manifest["events"][0]["payload"]["rawJSON"] = "{"
+    with pytest.raises(NativeProvenanceError, match="rawJSON is invalid"):
+        _validate(manifest)
