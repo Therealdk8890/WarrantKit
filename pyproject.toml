@@ -40,6 +40,9 @@ openai-agents = [
 attestation = [
     "cryptography>=42",
 ]
+platform-proof = [
+    "claimproofkit==0.1.1",
+]
 test = [
     "pytest>=7",
     "warrantkit[attestation]",
