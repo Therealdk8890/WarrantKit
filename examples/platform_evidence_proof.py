@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import hashlib
 import json
 from pathlib import Path
 from typing import Any
@@ -78,7 +79,7 @@ def run(output_dir: Path) -> dict[str, Any]:
                 "confidence": verdict.confidence,
                 "evidence_ids": [match.passage.id for match in verdict.evidence],
                 "evidence_fingerprints": [
-                    __import__("hashlib").sha256(match.passage.text.encode("utf-8")).hexdigest()
+                    hashlib.sha256(match.passage.text.encode("utf-8")).hexdigest()
                     for match in verdict.evidence
                 ],
             }
