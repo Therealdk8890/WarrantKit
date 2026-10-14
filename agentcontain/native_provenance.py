@@ -114,24 +114,15 @@ def validate_native_provenance_manifest(
             raise NativeProvenanceError("unsupported native provenance event schema version")
         if event_id in event_ids:
             raise NativeProvenanceError("duplicate native provenance event ID")
-        event_ids.add(event_id)
-        type_identifier = payload.get("typeIdentifier")
-        if type_identifier not in {"cpk_claim_extracted", "cpk_claim_verified", "cpk_report_finalized"}:
-            raise NativeProvenanceError("unsupported native provenance event type")
-        event_types[event_id] = type_identifier
-        event_payloads[event_id] = decoded_payload
-        run_ids.add(run_id)
-        event_contexts.add(context_id)
         if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
             raise NativeProvenanceError("native provenance event sequence must be non-negative integer")
-        sequences.append(sequence)
         if not isinstance(payload, dict):
             raise NativeProvenanceError("native provenance event payload is missing")
         type_identifier = payload.get("typeIdentifier")
         priority = payload.get("priorityValue")
         raw_json = payload.get("rawJSON")
-        if not isinstance(type_identifier, str) or not type_identifier:
-            raise NativeProvenanceError("native provenance event type identifier is missing")
+        if type_identifier not in {"cpk_claim_extracted", "cpk_claim_verified", "cpk_report_finalized"}:
+            raise NativeProvenanceError("unsupported native provenance event type")
         if not isinstance(priority, int) or isinstance(priority, bool):
             raise NativeProvenanceError("native provenance event priority must be an integer")
         if not isinstance(raw_json, str):
@@ -142,6 +133,12 @@ def validate_native_provenance_manifest(
             raise NativeProvenanceError("native provenance event rawJSON is invalid") from exc
         if not isinstance(decoded_payload, dict):
             raise NativeProvenanceError("native provenance event rawJSON must decode to an object")
+        event_ids.add(event_id)
+        event_types[event_id] = type_identifier
+        event_payloads[event_id] = decoded_payload
+        run_ids.add(run_id)
+        event_contexts.add(context_id)
+        sequences.append(sequence)
         if type_identifier == "cpk_claim_verified":
             claim_verdicts.append(decoded_payload)
         elif type_identifier == "cpk_report_finalized":
