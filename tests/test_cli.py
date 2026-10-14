@@ -31,7 +31,7 @@ class FakeEngine:
         return self.last_report
 
 
-def test_cli_json_run(monkeypatch, capsys) -> None:
+def test_cli_json_run_rejects_unsupported_egress(monkeypatch, capsys) -> None:
     monkeypatch.setattr(cli, "build_agentcontainment_engine", lambda agent_id, **kwargs: FakeEngine())
 
     assert cli.main([
@@ -42,14 +42,11 @@ def test_cli_json_run(monkeypatch, capsys) -> None:
         "--egress", "api.example",
         "--contain",
         "--json",
-    ]) == 0
+    ]) == 1
 
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["agent_id"] == "agent-1"
-    assert payload["policy_id"] == "production"
-    assert payload["state"] == "contained"
-    assert payload["events"][-1]["name"] == "containment_verified"
-    assert payload["containment"]["certified"] is True
+    captured = capsys.readouterr()
+    assert "destination_allowlist.v1" in captured.err
+    assert captured.out == ""
 
 
 def test_cli_writes_portable_evidence_file(monkeypatch, tmp_path, capsys) -> None:
