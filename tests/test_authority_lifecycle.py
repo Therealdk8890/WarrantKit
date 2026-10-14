@@ -17,7 +17,6 @@ def test_authorized_execution_violation_revokes_authority_before_recovery():
     policy = Policy(
         policy_id="prod-agent",
         capabilities=("read-data",),
-        allowed_egress=("https://approved.example",),
     )
     engine = build_agentcontainment_engine("agent-authority-e2e")
     admission = admit(
