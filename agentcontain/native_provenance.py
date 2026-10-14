@@ -87,6 +87,7 @@ def validate_native_provenance_manifest(
     if not isinstance(edges, list):
         raise NativeProvenanceError("native provenance edges must be a list")
     event_ids: set[str] = set()
+    event_types: dict[str, str] = {}
     run_ids: set[str] = set()
     event_contexts: set[str] = set()
     sequences: list[int] = []
@@ -113,6 +114,7 @@ def validate_native_provenance_manifest(
         if event_id in event_ids:
             raise NativeProvenanceError("duplicate native provenance event ID")
         event_ids.add(event_id)
+        event_types[event_id] = type_identifier if isinstance((type_identifier := payload.get("typeIdentifier")), str) else ""
         run_ids.add(run_id)
         event_contexts.add(context_id)
         if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 0:
@@ -184,6 +186,7 @@ def validate_native_provenance_manifest(
     if finalized.get("safeToPublish") is not safe_to_publish:
         raise NativeProvenanceError("ClaimProofKit verdict statuses conflict with safeToPublish")
 
+    edge_pairs: set[tuple[str, str, str]] = set()
     for edge in edges:
         if not isinstance(edge, dict):
             raise NativeProvenanceError("native provenance edge must be an object")
@@ -191,6 +194,29 @@ def validate_native_provenance_manifest(
             raise NativeProvenanceError("native provenance edge references an unknown event")
         if not isinstance(edge.get("type"), str) or not edge["type"]:
             raise NativeProvenanceError("native provenance edge type is missing")
+        edge_pairs.add((edge["sourceID"], edge["targetID"], edge["type"]))
+
+    extracted_ids = {event_id for event_id, kind in event_types.items() if kind == "cpk_claim_extracted"}
+    verified_ids = {event_id for event_id, kind in event_types.items() if kind == "cpk_claim_verified"}
+    finalized_ids = {event_id for event_id, kind in event_types.items() if kind == "cpk_report_finalized"}
+    if len(extracted_ids) != len(verified_ids):
+        raise NativeProvenanceError("native provenance extracted/verified claim event counts differ")
+    if len(finalized_ids) != 1:
+        raise NativeProvenanceError("native provenance must contain exactly one finalized report event")
+    finalized_id = next(iter(finalized_ids))
+    for extracted_id in extracted_ids:
+        matches = [target for source, target, kind in edge_pairs if source == extracted_id and kind == "verifiedBy"]
+        if len(matches) != 1 or matches[0] not in verified_ids:
+            raise NativeProvenanceError("native provenance extracted claim lacks its verifiedBy edge")
+    for verified_id in verified_ids:
+        if (verified_id, finalized_id, "derivedFrom") not in edge_pairs:
+            raise NativeProvenanceError("native provenance verified claim lacks its report lineage edge")
+    counts: dict[str, int] = {}
+    for verdict in claim_verdicts:
+        status = verdict.get("status")
+        counts[status] = counts.get(status, 0) + 1
+    if finalized.get("statusCounts") != counts:
+        raise NativeProvenanceError("ClaimProofKit status counts do not match verdict events")
 
     # These values are returned as bindings for a containing signed bundle.
     # They are not assertions that the claims are true or containment occurred.
