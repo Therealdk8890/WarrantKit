@@ -7,7 +7,7 @@ import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from agentcontain.incident_bundle import verify_incident_bundle, write_incident_bundle
+from agentcontain import verify_incident_bundle, write_incident_bundle
 
 
 def _valid_records() -> dict:
