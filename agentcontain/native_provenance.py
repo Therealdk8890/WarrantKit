@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import json
-from typing import Any, Mapping
+import uuid
+from typing import Any
 
 
 class NativeProvenanceError(ValueError):
@@ -98,6 +99,15 @@ def validate_native_provenance_manifest(
         sequence, payload = event.get("sequence"), event.get("payload")
         if not all(isinstance(v, str) and v for v in (event_id, run_id, context_id, engine_name)):
             raise NativeProvenanceError("native provenance event identity is incomplete")
+        try:
+            uuid.UUID(event_id)
+            uuid.UUID(run_id)
+        except (ValueError, AttributeError) as exc:
+            raise NativeProvenanceError("native provenance event IDs must be UUIDs") from exc
+        if engine_name != manifest["engineName"] or context_id != expected_context_id:
+            raise NativeProvenanceError("native provenance event engine or context mismatch")
+        if event.get("schemaVersion") != 1:
+            raise NativeProvenanceError("unsupported native provenance event schema version")
         if event_id in event_ids:
             raise NativeProvenanceError("duplicate native provenance event ID")
         event_ids.add(event_id)
@@ -109,8 +119,18 @@ def validate_native_provenance_manifest(
         if not isinstance(payload, dict):
             raise NativeProvenanceError("native provenance event payload is missing")
         type_identifier = payload.get("typeIdentifier")
+        priority = payload.get("priorityValue")
+        raw_json = payload.get("rawJSON")
         if not isinstance(type_identifier, str) or not type_identifier:
             raise NativeProvenanceError("native provenance event type identifier is missing")
+        if not isinstance(priority, int) or isinstance(priority, bool):
+            raise NativeProvenanceError("native provenance event priority must be an integer")
+        if not isinstance(raw_json, str):
+            raise NativeProvenanceError("native provenance event rawJSON must be a string")
+        try:
+            json.loads(raw_json)
+        except json.JSONDecodeError as exc:
+            raise NativeProvenanceError("native provenance event rawJSON is invalid") from exc
         fingerprint.update(f"{type_identifier}:{engine_name}|".encode("utf-8"))
     if run_ids != {expected_run_id}:
         raise NativeProvenanceError("native provenance run ID does not match incident binding")
@@ -126,6 +146,8 @@ def validate_native_provenance_manifest(
             raise NativeProvenanceError("native provenance edge must be an object")
         if edge.get("sourceID") not in event_ids or edge.get("targetID") not in event_ids:
             raise NativeProvenanceError("native provenance edge references an unknown event")
+        if not isinstance(edge.get("type"), str) or not edge["type"]:
+            raise NativeProvenanceError("native provenance edge type is missing")
 
     # These values are returned as bindings for a containing signed bundle.
     # They are not assertions that the claims are true or containment occurred.
