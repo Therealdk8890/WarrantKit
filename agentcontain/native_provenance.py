@@ -172,6 +172,12 @@ def validate_native_provenance_manifest(
     ).hexdigest()
     if computed_report_fingerprint != manifest["reportFingerprint"]:
         raise NativeProvenanceError("ClaimProofKit verdicts do not match report fingerprint")
+    status_counts: dict[str, int] = {}
+    for verdict in claim_verdicts:
+        status = verdict["status"]
+        status_counts[status] = status_counts.get(status, 0) + 1
+    if finalized.get("statusCounts") != status_counts:
+        raise NativeProvenanceError("ClaimProofKit status counts do not match trace verdicts")
     safe_to_publish = bool(claim_verdicts) and all(
         verdict.get("status") in approved_statuses for verdict in claim_verdicts
     )
