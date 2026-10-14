@@ -4,13 +4,15 @@ from agentcontain import cli
 def test_cli_demo_is_no_root_and_rejects_stale_warrant(capsys) -> None:
     assert cli.main(["demo"]) == 0
 
-    output = capsys.readouterr().out
-    assert "stale-Warrant replay proof" in output
-    assert "retained Warrant ACCEPTED" in output
-    assert "Containment advanced runtime epoch" in output
-    assert "Retained pre-containment Warrant: REJECTED" in output
-    assert "does not prove kernel-level workload termination" in output
-    assert "isolate the\ncontroller from the verifier" in output
+    lines = capsys.readouterr().out.strip().splitlines()
+    assert len(lines) == 2
+    assert lines[0].startswith("PASS:")
+    assert "retained Warrant ACCEPTED at epoch 0" in lines[0]
+    assert "containment advanced epoch to 1" in lines[0]
+    assert "replay REJECTED" in lines[0]
+    assert lines[1].startswith("SCOPE:")
+    assert "in-process verifier/controller" in lines[1]
+    assert "no kernel-kill proof or independent evidence claim" in lines[1]
 
 
 def test_demo_lifecycle_has_distinct_detection_and_verification() -> None:
