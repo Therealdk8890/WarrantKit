@@ -66,6 +66,11 @@ def test_real_dpk_attestation_verifies_only_with_independent_trusted_key() -> No
     assert embedded_only.is_valid
     assert embedded_only.trust.value == "embeddedKeyOnly"
 
+    wrong_key_id = "f" * 64 if trusted_key_id != "f" * 64 else "0" * 64
+    untrusted = document.verify(trusted_key_ids=[wrong_key_id])
+    assert not untrusted.is_valid
+    assert untrusted.failure.value == "untrustedKey"
+
     independently_trusted = document.verify(trusted_key_ids=[trusted_key_id])
     assert independently_trusted.is_valid
     assert independently_trusted.trust.value == "trustedKey"
