@@ -159,6 +159,10 @@ jobs:
           ).decode("ascii")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               env.write(f"WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64={public_key_b64}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Per-run incident-bundle trust anchor\n\n")
+              summary.write("This Ed25519 public key was generated for this CI run and is supplied separately to the incident-bundle verifier. Use it only to verify the artifact from this exact run. It is ephemeral and does not identify a production operator or provide host attestation.\n\n")
+              summary.write("Trusted public key (base64 raw Ed25519): `" + public_key_b64 + "`\n")
           PY
 
       - name: Run operator-facing real-kill evidence proof
