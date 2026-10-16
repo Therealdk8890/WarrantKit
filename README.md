@@ -2,6 +2,29 @@
 
 [![WarrantKit CI](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml)
 
+[![PyPI version](https://img.shields.io/pypi/v/warrantkit)](https://pypi.org/project/warrantkit/)
+
+**Latest release: [`warrantkit 0.1.3`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.1.3)** · [PyPI package](https://pypi.org/project/warrantkit/)
+
+## Install the published package
+
+WarrantKit 0.1.3 is published on PyPI. It requires Python 3.11 or newer.
+
+```bash
+python -m pip install --upgrade warrantkit==0.1.3
+warrantkit demo
+```
+
+The optional framework adapters are installed separately when needed:
+
+```bash
+python -m pip install "warrantkit[langchain]"
+python -m pip install "warrantkit[crewai]"
+python -m pip install "warrantkit[openai-agents]"
+```
+
+The portable `warrantkit demo` is a simulated lifecycle demonstration, not proof of kernel-level process containment. For the strongest containment claim, use the environment-gated Linux cgroup-v2 proof described below.
+
 **Authority that stops being valid when the runtime state that created it changes.**
 
 WarrantKit binds execution authority to accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, retained pre-containment authority is fenced out. WarrantKit coordinates the authority lifecycle; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides external runtime enforcement.
