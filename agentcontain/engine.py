@@ -577,6 +577,10 @@ def evidence_envelope(admission: Admission, *, fleet: FleetRegistry | None = Non
     the adapter never manufactures host-proof claims.
     """
     identity = admission.identity
+    try:
+        admission.policy.validate()
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("admission policy bundle is no longer valid") from exc
     if identity.policy_id != admission.policy.policy_id:
         raise RuntimeError("admission policy_id diverges from accepted policy")
     if identity.policy_digest != admission.policy.policy_digest:
