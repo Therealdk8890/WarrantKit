@@ -7,71 +7,26 @@ the controller-owned gateway is the final runtime enforcement point.
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
 from ..engine import Admission
-from ..warrant import RevocationState, verify_warrant
+from ._authority import verify_current_authority
 
 
 class CrewAIWarrantError(RuntimeError):
     """Raised when a CrewAI tool call is not authorized by WarrantKit."""
 
 
-def _current_runtime(admission: Admission, gateway):
-    runtime = getattr(gateway, "containment", None)
-    runtime = getattr(runtime, "runtime", None)
-    if runtime is None:
-        raise CrewAIWarrantError(
-            "WarrantKit CrewAI integration requires an AgentContainment ActionGateway"
-        )
-    return runtime
-
-
 def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
-    warrant = admission.warrant
-    if warrant is None:
-        raise CrewAIWarrantError("execution has no Warrant authority")
-    if warrant_verifier is None:
-        raise CrewAIWarrantError("a trusted Ed25519 Warrant verifier is required")
-    if admission.warrant_attestation is None:
-        raise CrewAIWarrantError("execution has no signed Warrant attestation; issue with warrant_signer")
-    expected_identity, expected_policy, expected_warrant, expected_attestation = expected_snapshot
-    if (
-        admission.identity != expected_identity
-        or admission.policy != expected_policy
-        or admission.warrant != expected_warrant
-        or admission.warrant_attestation != expected_attestation
-    ):
-        raise CrewAIWarrantError(
-            "admission authority changed after the protected tool was wrapped"
-        )
-    try:
-        signed_warrant = warrant_verifier.verify_warrant(admission.warrant_attestation)
-    except (TypeError, ValueError) as exc:
-        raise CrewAIWarrantError(f"Warrant signature verification failed: {exc}") from exc
-    if signed_warrant != warrant:
-        raise CrewAIWarrantError("signed Warrant payload does not match the active Warrant")
-    snapshot = _current_runtime(admission, gateway).snapshot()
-    try:
-        verify_warrant(
-            warrant,
-            execution_id=admission.identity.execution_id,
-            agent_id=admission.identity.agent_id,
-            policy_id=admission.identity.policy_id,
-            policy_digest=admission.identity.policy_digest,
-            runtime_id=snapshot.runtime_id,
-            epoch=snapshot.epoch,
-            now=datetime.now(timezone.utc),
-        )
-    except ValueError as exc:
-        raise CrewAIWarrantError(f"Warrant verification failed: {exc}") from exc
-    accepted_capabilities = set(admission.policy.policy.capabilities)
-    if not set(warrant.authority.capabilities).issubset(accepted_capabilities):
-        raise CrewAIWarrantError("Warrant capabilities exceed the accepted policy")
-    if warrant.lifecycle.state is RevocationState.REVOKED:
-        raise CrewAIWarrantError("Warrant is revoked")
+    verify_current_authority(
+        admission,
+        gateway,
+        warrant_verifier,
+        expected_snapshot,
+        error_type=CrewAIWarrantError,
+        framework="CrewAI",
+    )
 
 
 def wrap_crewai_tool(
