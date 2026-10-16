@@ -1,4 +1,4 @@
-"""Durable, transport-neutral evidence storage primitives."""
+"""Transport-neutral evidence storage primitives."""
 
 from __future__ import annotations
 
@@ -18,7 +18,11 @@ class EvidenceStore(Protocol):
 
 
 class InMemoryEvidenceStore:
-    """Reference durable-store semantics for tests and local integrations."""
+    """Reference in-memory store with durable-store idempotency semantics.
+
+    This implementation is not disk-durable; it protects retained snapshots
+    from mutation through caller-owned or returned envelope objects.
+    """
 
     def __init__(self) -> None:
         self._items: dict[str, EvidenceEnvelope] = {}
