@@ -16,6 +16,7 @@ from .fleet import FleetRegistry
 from .incident import IncidentSummary
 from .identity import ExecutionIdentity
 from .policy_assignment import PolicyAssignmentRegistry
+from .verification_result import VerificationResult
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,7 @@ class OperatorIncidentView:
     governance: Mapping[str, str] | None
     policy: Mapping[str, object]
     evidence: EvidenceEnvelope
+    verification_result: VerificationResult | None
     timeline: tuple[EvidenceTimelineEvent, ...]
     external_evidence: tuple[ExternalEvidenceReference, ...]
     receipt_id: str | None
@@ -63,6 +65,7 @@ class OperatorIncidentView:
         *,
         fleet: FleetRegistry | None = None,
         assignments: PolicyAssignmentRegistry | None = None,
+        verification_result: VerificationResult | None = None,
     ) -> "OperatorIncidentView":
         execution = envelope.execution
         identity = ExecutionIdentity(
@@ -79,7 +82,7 @@ class OperatorIncidentView:
         )
         proof_status = str(envelope.verification.get("status", "observed"))
         incident = IncidentSummary.from_execution(
-            identity, events, proof_status=proof_status
+            identity, events, proof_status=proof_status, verification_result=verification_result
         )
 
         governance = (
@@ -137,6 +140,7 @@ class OperatorIncidentView:
             governance=governance,
             policy=policy,
             evidence=envelope,
+            verification_result=verification_result,
             timeline=timeline,
             external_evidence=envelope.external_evidence,
             receipt_id=envelope.receipt_id,
@@ -149,6 +153,11 @@ class OperatorIncidentView:
             "policy": dict(self.policy),
             "incident": self.incident.to_dict(),
             "evidence": self.evidence.to_dict(),
+            "verification_result": (
+                self.verification_result.to_dict()
+                if self.verification_result is not None
+                else None
+            ),
             "timeline": [event.to_dict() for event in self.timeline],
             "external_evidence": [
                 reference.to_dict() for reference in self.external_evidence

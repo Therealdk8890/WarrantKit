@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from .events import Event
 from .identity import ExecutionIdentity
+from .verification_result import VerificationResult
 
 
 class IncidentStatus(StrEnum):
@@ -43,6 +44,7 @@ class IncidentSummary:
         events: tuple[Event, ...],
         *,
         proof_status: str = "observed",
+        verification_result: VerificationResult | None = None,
     ) -> "IncidentSummary":
         if not events:
             raise ValueError("incident requires at least one execution event")
@@ -61,7 +63,7 @@ class IncidentSummary:
             status = IncidentStatus.RECOVERED
         elif "recovery_requested" in names:
             status = IncidentStatus.RECOVERY_PENDING
-        elif proof_status == "verified" or "verification_completed" in names:
+        elif verification_result is not None and verification_result.is_verified:
             status = IncidentStatus.VERIFIED
         elif "containment_verified" in names or "recontainment_verified" in names:
             status = IncidentStatus.CONTAINED
