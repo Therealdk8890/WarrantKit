@@ -88,3 +88,11 @@ def test_standalone_verifier_rejects_stale_epoch(tmp_path):
     result = _run(document, tmp_path)
     assert result.returncode == 1
     assert "runtime binding epoch does not match execution" in result.stderr
+
+
+def test_standalone_verifier_rejects_non_finite_timestamp(tmp_path):
+    document = _fixture()
+    document["proof"]["runtime_binding"]["observation"]["record"]["observed_at"] = float("nan")
+    result = _run(document, tmp_path)
+    assert result.returncode == 1
+    assert "REJECTED:" in result.stderr

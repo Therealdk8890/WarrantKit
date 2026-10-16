@@ -322,3 +322,15 @@ def test_observation_must_explicitly_prove_non_executability(can_execute):
 
     with pytest.raises(ValueError, match="does not prove non-executability"):
         envelope.with_runtime_pinned_evidence(binding)
+
+
+def test_non_finite_runtime_timestamp_is_rejected():
+    binding = _binding()
+    binding["authority"]["record"]["revoked_at"] = float("nan")
+    envelope = EvidenceEnvelope.from_execution(
+        execution={"execution_id": "e", "agent_id": "agent-1", "policy_id": "p", "policy_digest": "d", "epoch": 1, "runtime_id": "runtime-1"},
+        events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
+    )
+
+    with pytest.raises(ValueError):
+        envelope.with_runtime_pinned_evidence(binding)
