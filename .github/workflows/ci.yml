@@ -92,6 +92,9 @@ jobs:
       - name: Install WarrantKit with LangChain integration
         run: python -m pip install -e '.[langchain]'
 
+      - name: Run public LangChain middleware factory tests
+        run: python -m pytest -q tests/test_langchain_middleware_factory.py
+
       - name: Run deterministic authority boundary proof
         run: python tools/run_authority_boundary_demo.py
 
