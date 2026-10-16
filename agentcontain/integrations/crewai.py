@@ -67,6 +67,9 @@ def _verify_current_authority(admission: Admission, gateway, warrant_verifier, e
         )
     except ValueError as exc:
         raise CrewAIWarrantError(f"Warrant verification failed: {exc}") from exc
+    accepted_capabilities = set(admission.policy.policy.capabilities)
+    if not set(warrant.authority.capabilities).issubset(accepted_capabilities):
+        raise CrewAIWarrantError("Warrant capabilities exceed the accepted policy")
     if warrant.lifecycle.state is RevocationState.REVOKED:
         raise CrewAIWarrantError("Warrant is revoked")
 
