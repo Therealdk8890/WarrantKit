@@ -64,7 +64,7 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  Policy:       {view.policy.get('policy_id', 'unknown')}")
                 print(f"  Event:        {incident.trigger or 'none'}")
                 print(f"  Status:       {incident.status.value.upper()}")
-                print(f"  Proof:        {incident.proof_status}")
+                print(f"  Reported proof status: {incident.proof_status}")
                 if view.receipt_id:
                     print(f"  Receipt:      {view.receipt_id}")
                 print("  Timeline:")
