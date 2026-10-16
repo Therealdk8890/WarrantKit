@@ -315,33 +315,42 @@ def contain(admission: Admission) -> object:
     it controls the provider-level fence boundary.
     """
     report = admission.engine.contain()
-    if not getattr(report, "complete", True):
-        raise RuntimeError(
-            "enforcement engine reported containment failures: "
-            + "; ".join(getattr(report, "failures", ()))
-        )
-
-    # AgentContainment advances its execution epoch when containment takes
-    # effect. When the authoritative report exposes that epoch, require the
-    # exact next platform epoch and adopt it before recording the lifecycle
-    # event. This keeps receipts, events, and runtime proof in one namespace.
     report_epoch = getattr(report, "epoch", None)
+
+    # A runtime can fence and advance its epoch before later enforcement
+    # providers fail. Reconcile that authoritative transition and invalidate
+    # old authority before deciding whether the full containment proof passed.
     if report_epoch is not None:
         if isinstance(report_epoch, bool) or not isinstance(report_epoch, int):
+            _revoke_warrant(admission)
             raise TypeError("runtime containment epoch must be an integer")
         expected_epoch = admission.identity.epoch + 1
         if report_epoch != expected_epoch:
+            _revoke_warrant(admission)
             raise RuntimeError(
                 f"runtime containment epoch {report_epoch} does not match "
                 f"expected platform epoch {expected_epoch}"
             )
-        # Keep epoch transition ownership inside the platform state machine.
         admission.machine.start_new_epoch(report_epoch)
         admission.identity = admission.machine.identity
+        _revoke_warrant(admission)
 
-    # The epoch transition makes old authority stale; explicit revocation keeps
-    # the lifecycle state visible and fail-closed even to epoch-unaware callers.
-    _revoke_warrant(admission)
+    complete = getattr(report, "complete", None)
+    if complete is not True:
+        # Do not leave old authority active after an incomplete or malformed
+        # containment attempt. This does not claim the host boundary succeeded.
+        _revoke_warrant(admission)
+        if complete is False:
+            raise RuntimeError(
+                "enforcement engine reported containment failures: "
+                + "; ".join(getattr(report, "failures", ()))
+            )
+        raise RuntimeError("enforcement engine returned an invalid containment report")
+
+    # Provider-neutral engines may not expose an epoch; still revoke the
+    # current Warrant after a completed containment operation.
+    if report_epoch is None:
+        _revoke_warrant(admission)
     admission.machine.contain()
     return report
 

@@ -483,3 +483,58 @@ def test_authoritative_epoch_chain_spans_containment_recovery_and_evidence():
         "reason": "runtime-report-epoch-mismatch",
     }
     assert evidence.proof == {}
+
+
+def test_incomplete_runtime_containment_still_fences_old_warrant():
+    class IncompleteRuntimeEngine(FakeEngine):
+        def contain(self):
+            self.calls += 1
+            self.last_report = type(
+                "IncompleteRuntimeReport",
+                (),
+                {"complete": False, "epoch": 1, "failures": ("provider failed",)},
+            )()
+            return self.last_report
+
+    admission = admit(
+        Policy("production"),
+        agent_id="agent-1",
+        engine=IncompleteRuntimeEngine(),
+        runtime_id="runtime-1",
+    )
+    assert admission.warrant is not None
+    assert admission.warrant.lifecycle.state.value == "active"
+    assert admission.warrant_attestation is None
+
+    with pytest.raises(RuntimeError, match="containment failures: provider failed"):
+        contain(admission)
+
+    assert admission.identity.epoch == 1
+    assert admission.machine.identity.epoch == 1
+    assert admission.warrant.lifecycle.state.value == "revoked"
+    assert admission.warrant_attestation is None
+    assert admission.machine.state.value == "admitted"
+    assert admission.machine.events.events == ()
+
+
+def test_malformed_containment_report_cannot_be_treated_as_success():
+    class MissingReportEngine(FakeEngine):
+        def contain(self):
+            self.calls += 1
+            self.last_report = None
+            return None
+
+    admission = admit(
+        Policy("production"),
+        agent_id="agent-1",
+        engine=MissingReportEngine(),
+        runtime_id="runtime-1",
+    )
+
+    with pytest.raises(RuntimeError, match="invalid containment report"):
+        contain(admission)
+
+    assert admission.machine.state.value == "admitted"
+    assert admission.warrant.lifecycle.state.value == "revoked"
+    assert admission.warrant_attestation is None
+    assert not any(event.name == "containment_verified" for event in admission.machine.events.events)
