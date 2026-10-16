@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Independent verifier for the portable runtime-pinned evidence contract."""
 from __future__ import annotations
-import hashlib, json, sys
+import hashlib, json, math, sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Mapping
@@ -13,7 +13,7 @@ REQUIRED_ENVELOPE_KEYS = {"schema_version","execution","events","enforcement","v
 REQUIRED_BINDING_KEYS = {"schema_version","runtime_id","agent_id","epoch","authority","enforcement","observation"}
 
 def canonical_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 def fail(message: str) -> None:
     raise ValueError(message)
@@ -23,7 +23,9 @@ def digest_record(record: Mapping[str, Any]) -> str:
 
 def parse_time(label: str, value: Any) -> float:
     if isinstance(value, bool): fail(f"{label} timestamp is invalid")
-    if isinstance(value, (int, float)): return float(value)
+    if isinstance(value, (int, float)):
+        if isinstance(value, float) and not math.isfinite(value): fail(f"{label} timestamp must be finite")
+        return float(value)
     if isinstance(value, str):
         try: return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
         except ValueError as exc: raise ValueError(f"{label} timestamp is not ISO-8601") from exc
