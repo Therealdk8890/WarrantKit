@@ -37,6 +37,16 @@ def verify_current_authority(
     if admission.warrant_attestation is None:
         reject("execution has no signed Warrant attestation; issue with warrant_signer")
 
+    try:
+        admission.policy.validate()
+    except (TypeError, ValueError) as exc:
+        reject(f"accepted policy bundle verification failed: {exc}", exc)
+    if (
+        admission.policy.policy_id != admission.identity.policy_id
+        or admission.policy.policy_digest != admission.identity.policy_digest
+    ):
+        reject("accepted policy identity does not match execution")
+
     expected_identity, expected_policy, expected_warrant, expected_attestation = expected_snapshot
     if (
         admission.identity != expected_identity
