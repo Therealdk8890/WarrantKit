@@ -34,7 +34,9 @@ def _envelope(receipt_id=None, digest="digest") -> EvidenceEnvelope:
 def test_store_put_get_round_trip_preserves_envelope():
     store = InMemoryEvidenceStore()
     envelope = _envelope("receipt-1")
-    assert store.put(envelope) is envelope
+    stored = store.put(envelope)
+    assert stored == envelope
+    assert stored is not envelope
     assert store.get("receipt-1") == envelope
     assert store.exists("receipt-1")
 
@@ -61,5 +63,30 @@ def test_store_rejects_receipt_collision_with_changed_evidence():
 def test_store_retains_receiptless_evidence():
     store = InMemoryEvidenceStore()
     envelope = _envelope()
-    assert store.put(envelope) is envelope
+    stored = store.put(envelope)
+    assert stored == envelope
+    assert stored is not envelope
     assert store.all() == (envelope,)
+
+
+def test_store_snapshots_nested_evidence_from_mutation():
+    store = InMemoryEvidenceStore()
+    envelope = _envelope("receipt-immutable")
+    returned = store.put(envelope)
+
+    envelope.proof["mutated_source"] = True
+    returned.proof["mutated_return"] = True
+
+    retrieved = store.get("receipt-immutable")
+    assert retrieved is not None
+    assert "mutated_source" not in retrieved.proof
+    assert "mutated_return" not in retrieved.proof
+
+    retrieved.proof["mutated_read"] = True
+    again = store.get("receipt-immutable")
+    assert again is not None
+    assert "mutated_read" not in again.proof
+
+    listed = store.all()
+    listed[0].proof["mutated_list"] = True
+    assert "mutated_list" not in store.get("receipt-immutable").proof
