@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   build-and-publish:
+    if: github.event_name != 'workflow_dispatch' || github.ref == 'refs/heads/main'
     name: Build and publish distribution
     runs-on: ubuntu-latest
 
