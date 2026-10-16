@@ -51,6 +51,9 @@ jobs:
       - name: Install Git-only test dependency
         run: python -m pip install "interleave-test @ git+https://github.com/Therealdk8890/interleave-test.git@c610ec63406d5a5c0d9ba1a3c0342072ed473752"
 
+      - name: Install ClaimProofKit test dependency
+        run: python -m pip install "claimproofkit @ git+https://github.com/Therealdk8890/ClaimProofKitPython.git@10c3707c249a582c7850806aa3f9570bcf0d0238"
+
       - name: Install WarrantKit
         run: python -m pip install -e '.[test]'
 
@@ -115,6 +118,9 @@ jobs:
 
       - name: Install Git-only test dependency
         run: python -m pip install "interleave-test @ git+https://github.com/Therealdk8890/interleave-test.git@c610ec63406d5a5c0d9ba1a3c0342072ed473752"
+
+      - name: Install ClaimProofKit test dependency
+        run: python -m pip install "claimproofkit @ git+https://github.com/Therealdk8890/ClaimProofKitPython.git@10c3707c249a582c7850806aa3f9570bcf0d0238"
 
       - name: Install WarrantKit
         run: python -m pip install -e '.[test]'
