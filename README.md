@@ -25,6 +25,8 @@ python -m pip install "warrantkit[openai-agents]"
 
 The portable `warrantkit demo` is a simulated lifecycle demonstration, not proof of kernel-level process containment. For the strongest containment claim, use the environment-gated Linux cgroup-v2 proof described below.
 
+**New here?** Follow the [getting-started guide](docs/GETTING_STARTED.md) to run the deterministic framework-to-gateway proof, choose your framework adapter, and understand the enforcement boundary.
+
 **Authority that stops being valid when the runtime state that created it changes.**
 
 WarrantKit binds execution authority to accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, retained pre-containment authority is fenced out. WarrantKit coordinates the authority lifecycle; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides external runtime enforcement.
