@@ -183,7 +183,11 @@ def test_tampered_serialized_runtime_binding_fails_closed():
             "runtime_id": admission.identity.runtime_id,
         },
         events=({"execution_id": admission.identity.execution_id, "sequence": 1, "name": "containment_verified", "epoch": 1},),
-    ).with_runtime_pinned_evidence(_binding())
+    ).with_runtime_pinned_evidence(_binding(
+        execution_id=admission.identity.execution_id,
+        policy_id=admission.identity.policy_id,
+        policy_digest=admission.identity.policy_digest,
+    ))
     document = envelope.to_dict()
     document["proof"]["runtime_binding"]["epoch"] = 0
 
