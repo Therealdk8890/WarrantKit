@@ -14,7 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..engine import Admission
-from .langchain import LangChainWarrantError, _verify_current_authority
+from ._authority import verify_current_authority
 
 
 class OpenAIAgentsWarrantError(RuntimeError):
@@ -77,12 +77,14 @@ def wrap_openai_tool(
 
     @wraps(function)
     def invoke_authorized(*args: Any, **kwargs: Any) -> Any:
-        try:
-            _verify_current_authority(
-                admission, gateway, warrant_verifier, expected_snapshot
-            )
-        except LangChainWarrantError as exc:
-            raise OpenAIAgentsWarrantError(str(exc)) from exc
+        verify_current_authority(
+            admission,
+            gateway,
+            warrant_verifier,
+            expected_snapshot,
+            error_type=OpenAIAgentsWarrantError,
+            framework="OpenAI Agents",
+        )
 
         warrant = admission.warrant
         if warrant is None:
