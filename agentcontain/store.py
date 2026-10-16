@@ -27,23 +27,32 @@ class InMemoryEvidenceStore:
     def put(self, envelope: EvidenceEnvelope) -> EvidenceEnvelope:
         if not isinstance(envelope, EvidenceEnvelope):
             raise TypeError("envelope must be an EvidenceEnvelope")
-        receipt_id = envelope.receipt_id
+        snapshot = _snapshot(envelope)
+        receipt_id = snapshot.receipt_id
         if receipt_id is None:
-            self._anonymous.append(envelope)
-            return envelope
+            self._anonymous.append(snapshot)
+            return _snapshot(snapshot)
         existing = self._items.get(receipt_id)
         if existing is None:
-            self._items[receipt_id] = envelope
-            return envelope
-        if existing.to_json() != envelope.to_json():
+            self._items[receipt_id] = snapshot
+            return _snapshot(snapshot)
+        if existing.to_json() != snapshot.to_json():
             raise ValueError(f"evidence receipt_id collision: {receipt_id}")
-        return existing
+        return _snapshot(existing)
 
     def get(self, receipt_id: str) -> EvidenceEnvelope | None:
-        return self._items.get(receipt_id)
+        envelope = self._items.get(receipt_id)
+        return _snapshot(envelope) if envelope is not None else None
 
     def exists(self, receipt_id: str) -> bool:
         return receipt_id in self._items
 
     def all(self) -> tuple[EvidenceEnvelope, ...]:
-        return tuple(self._items.values()) + tuple(self._anonymous)
+        return tuple(_snapshot(item) for item in self._items.values()) + tuple(
+            _snapshot(item) for item in self._anonymous
+        )
+
+
+def _snapshot(envelope: EvidenceEnvelope) -> EvidenceEnvelope:
+    """Round-trip through canonical JSON to detach mutable nested mappings."""
+    return EvidenceEnvelope.from_json(envelope.to_json())
