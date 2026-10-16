@@ -107,6 +107,9 @@ class Admission:
     warrant: Warrant | None = None
     warrant_attestation: dict | None = None
     egress_binding: EgressBinding | None = None
+    warrant_issuer: str = "warrantkit"
+    warrant_ttl: timedelta = timedelta(hours=1)
+    warrant_signing_required: bool = False
     _lock: threading.RLock = field(default_factory=threading.RLock, repr=False, compare=False)
 
 
@@ -256,6 +259,9 @@ def admit(
         warrant=warrant,
         warrant_attestation=warrant_attestation,
         egress_binding=egress_binding,
+        warrant_issuer=warrant_issuer,
+        warrant_ttl=warrant_ttl,
+        warrant_signing_required=warrant is not None and warrant_signer is not None,
     )
 
 @_synchronized
@@ -280,14 +286,14 @@ def _issue_current_warrant(admission: Admission, warrant_signer=None) -> Warrant
     issued_at = datetime.now(timezone.utc)
     warrant = Warrant.issue(
         warrant_id=str(uuid4()),
-        issuer="warrantkit",
+        issuer=admission.warrant_issuer,
         agent_id=admission.identity.agent_id,
         execution_id=admission.identity.execution_id,
         policy=admission.policy,
         runtime_id=admission.identity.runtime_id,
         epoch=admission.identity.epoch,
         issued_at=issued_at,
-        expires_at=issued_at + timedelta(hours=1),
+        expires_at=issued_at + admission.warrant_ttl,
         capabilities=tuple(admission.policy.policy.capabilities),
     )
     verify_warrant(
@@ -302,7 +308,11 @@ def _issue_current_warrant(admission: Admission, warrant_signer=None) -> Warrant
     )
     admission.warrant = warrant
     sign_warrant = getattr(warrant_signer, "sign_warrant", None)
+    if warrant_signer is not None and not callable(sign_warrant):
+        raise TypeError("warrant_signer must provide sign_warrant(warrant)")
     admission.warrant_attestation = sign_warrant(warrant).to_dict() if callable(sign_warrant) else None
+    if admission.warrant_attestation is not None:
+        admission.warrant_signing_required = True
     return warrant
 
 @_synchronized
@@ -500,6 +510,14 @@ def recover(admission: Admission, authorization, *, warrant_signer=None) -> int:
     operation = getattr(admission.engine, "recover", None)
     if operation is None:
         raise RuntimeError("enforcement engine does not expose recovery")
+    if admission.warrant_signing_required and warrant_signer is None:
+        raise RuntimeError(
+            "recovery of signed Warrant authority requires warrant_signer"
+        )
+    if warrant_signer is not None and not callable(
+        getattr(warrant_signer, "sign_warrant", None)
+    ):
+        raise TypeError("warrant_signer must provide sign_warrant(warrant)")
     admission.machine.recover()
     try:
         epoch = operation(authorization)
