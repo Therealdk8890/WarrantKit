@@ -503,7 +503,7 @@ def test_incomplete_runtime_containment_still_fences_old_warrant():
         runtime_id="runtime-1",
     )
     assert admission.warrant is not None
-    assert admission.warrant.lifecycle.value == "active"
+    assert admission.warrant.lifecycle.state.value == "active"
     assert admission.warrant_attestation is None
 
     with pytest.raises(RuntimeError, match="containment failures: provider failed"):
@@ -511,7 +511,7 @@ def test_incomplete_runtime_containment_still_fences_old_warrant():
 
     assert admission.identity.epoch == 1
     assert admission.machine.identity.epoch == 1
-    assert admission.warrant.lifecycle.value == "revoked"
+    assert admission.warrant.lifecycle.state.value == "revoked"
     assert admission.warrant_attestation is None
     assert admission.machine.state.value == "admitted"
     assert admission.machine.events.events == ()
@@ -535,6 +535,6 @@ def test_malformed_containment_report_cannot_be_treated_as_success():
         contain(admission)
 
     assert admission.machine.state.value == "admitted"
-    assert admission.warrant.lifecycle.value == "revoked"
+    assert admission.warrant.lifecycle.state.value == "revoked"
     assert admission.warrant_attestation is None
     assert not any(event.name == "containment_verified" for event in admission.machine.events.events)
