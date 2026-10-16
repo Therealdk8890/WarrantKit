@@ -44,7 +44,6 @@ test = [
     "pytest>=7",
     "warrantkit[attestation]",
     "warrantkit[openai-agents]",
-    "claimproofkit @ git+https://github.com/Therealdk8890/ClaimProofKitPython.git@10c3707c249a582c7850806aa3f9570bcf0d0238",
 ]
 
 [tool.pytest.ini_options]
