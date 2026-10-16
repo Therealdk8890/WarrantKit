@@ -7,9 +7,12 @@ be treated as runtime enforcement merely because it is present in a Policy.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 import hashlib
 import json
+from collections.abc import Mapping
+from types import MappingProxyType
 
 
 @dataclass(frozen=True)
@@ -25,13 +28,39 @@ class Policy:
     version: int = 1
     allowed_egress: tuple[str, ...] = ()
     capabilities: tuple[str, ...] = ()
-    metadata: dict[str, str] = field(default_factory=dict)
+    metadata: Mapping[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        if not self.policy_id.strip():
+        if not isinstance(self.policy_id, str) or not self.policy_id.strip():
             raise ValueError("policy_id must not be empty")
+        if isinstance(self.version, bool) or not isinstance(self.version, int):
+            raise TypeError("version must be an integer")
         if self.version < 1:
             raise ValueError("version must be >= 1")
+
+        for name in ("allowed_egress", "capabilities"):
+            values = getattr(self, name)
+            if not isinstance(values, (tuple, list)):
+                raise TypeError(f"{name} must be a sequence of strings")
+            normalized = tuple(values)
+            if any(not isinstance(value, str) or not value.strip() for value in normalized):
+                raise ValueError(f"{name} entries must be non-empty strings")
+            object.__setattr__(self, name, normalized)
+
+        if not isinstance(self.metadata, Mapping):
+            raise TypeError("metadata must be a mapping of strings to strings")
+        metadata = dict(self.metadata)
+        if any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in metadata.items()
+        ):
+            raise TypeError("metadata keys and values must be strings")
+        object.__setattr__(self, "metadata", MappingProxyType(metadata))
+
+    def __deepcopy__(self, memo):
+        """Reuse this deeply immutable policy in wrapper authority snapshots."""
+        memo[id(self)] = self
+        return self
 
     def canonical(self) -> str:
         payload = {
