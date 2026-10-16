@@ -152,3 +152,50 @@ def test_crewai_tool_rejects_replay_of_another_valid_signed_warrant() -> None:
 
     assert tool.calls == []
 
+
+def test_crewai_tool_rejects_signed_warrant_that_exceeds_accepted_policy() -> None:
+    """A valid signature must not let a Warrant exceed the accepted policy."""
+    PaymentTool = _integration()
+    from datetime import datetime, timedelta, timezone
+
+    from agentcontain.integrations.crewai import CrewAIWarrantError, wrap_crewai_tool
+    from agentcontain.warrant import Warrant
+
+    engine = build_agentcontainment_engine("agent-crewai-policy-escalation")
+    signer = Ed25519Signer.generate("crewai-policy-escalation-test")
+    admission = admit(
+        Policy("payments", capabilities=("payments_refund",)),
+        agent_id="agent-crewai-policy-escalation",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+        warrant_signer=signer,
+    )
+    now = datetime.now(timezone.utc)
+    overbroad_warrant = Warrant.issue(
+        warrant_id="overbroad-crewai-warrant",
+        issuer="warrantkit",
+        agent_id=admission.identity.agent_id,
+        execution_id=admission.identity.execution_id,
+        policy=admission.policy,
+        runtime_id=engine.runtime_id,
+        epoch=admission.identity.epoch,
+        issued_at=now,
+        expires_at=now + timedelta(minutes=5),
+        capabilities=("payments_refund", "admin"),
+    )
+    admission.warrant = overbroad_warrant
+    admission.warrant_attestation = signer.sign_warrant(overbroad_warrant).to_dict()
+
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    tool = PaymentTool()
+    protected = wrap_crewai_tool(
+        tool,
+        admission,
+        gateway,
+        warrant_verifier=Ed25519Verifier({signer.key_id: signer.public_key()}),
+    )
+
+    with pytest.raises(CrewAIWarrantError, match="Warrant capabilities exceed the accepted policy"):
+        protected.run(amount=25)
+
+    assert tool.calls == []
