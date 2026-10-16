@@ -30,7 +30,7 @@ def _admission(runtime_id="runtime-1"):
     )
 
 
-def _binding(*, epoch=1, runtime_id="runtime-1", action="KILL", state="TERMINATED"):
+def _binding(*, epoch=1, runtime_id="runtime-1", action="KILL", state="TERMINATED", execution_id="e", policy_id="p", policy_digest="d"):
     from agentcontain.evidence import canonical_json
     import hashlib
 
@@ -47,6 +47,7 @@ def _binding(*, epoch=1, runtime_id="runtime-1", action="KILL", state="TERMINATE
         "epoch": epoch,
         "authority": signed_record({
             "runtime_id": runtime_id, "agent_id": "agent-1", "epoch": epoch,
+            "execution_id": execution_id, "policy_id": policy_id, "policy_digest": policy_digest,
             "revoked": True, "revoked_at": "2026-09-30T17:00:00Z",
         }) | {"revoked": True, "revoked_at": "2026-09-30T17:00:00Z"},
         "enforcement": signed_record({
@@ -55,7 +56,7 @@ def _binding(*, epoch=1, runtime_id="runtime-1", action="KILL", state="TERMINATE
         }) | {"action": action, "external_boundary": True, "occurred_at": "2026-09-30T17:00:01Z"},
         "observation": signed_record({
             "runtime_id": runtime_id, "agent_id": "agent-1", "epoch": epoch,
-            "state": state, "observed_at": "2026-09-30T17:00:02Z",
+            "state": state, "can_execute": False, "observed_at": "2026-09-30T17:00:02Z",
         }) | {"state": state, "observed_at": "2026-09-30T17:00:02Z"},
     }
 
@@ -76,7 +77,11 @@ def test_runtime_pinned_binding_checks_structure_without_claiming_authenticity()
         verification={"status": "observed"},
     )
 
-    bound = envelope.with_runtime_pinned_evidence(_binding())
+    bound = envelope.with_runtime_pinned_evidence(_binding(
+        execution_id=admission.identity.execution_id,
+        policy_id=admission.identity.policy_id,
+        policy_digest=admission.identity.policy_digest,
+    ))
 
     assert bound.verification["status"] == "observed"
     assert bound.proof["runtime_binding"]["runtime_id"] == "runtime-1"
@@ -87,7 +92,12 @@ def test_stale_runtime_binding_cannot_verify_new_epoch():
     admission = _admission()
     contain(admission)
     admission.identity = admission.identity.advance_epoch()
-    binding = _binding(epoch=1)
+    binding = _binding(
+        epoch=1,
+        execution_id=admission.identity.execution_id,
+        policy_id=admission.identity.policy_id,
+        policy_digest=admission.identity.policy_digest,
+    )
 
     with pytest.raises(ValueError, match="epoch does not match"):
         EvidenceEnvelope.from_execution(
@@ -119,7 +129,12 @@ def test_substituted_runtime_cannot_verify():
     )
 
     with pytest.raises(ValueError, match="runtime_id does not match"):
-        envelope.with_runtime_pinned_evidence(_binding(runtime_id="runtime-substituted"))
+        envelope.with_runtime_pinned_evidence(_binding(
+            runtime_id="runtime-substituted",
+            execution_id=admission.identity.execution_id,
+            policy_id=admission.identity.policy_id,
+            policy_digest=admission.identity.policy_digest,
+        ))
 
 
 def test_agent_self_claim_cannot_satisfy_runtime_binding():
@@ -147,7 +162,11 @@ def test_observation_before_enforcement_fails_closed():
 def test_verify_path_accepts_runtime_pinned_second_evidence():
     admission = _admission()
     contain(admission)
-    verify(admission, runtime_binding=_binding())
+    verify(admission, runtime_binding=_binding(
+        execution_id=admission.identity.execution_id,
+        policy_id=admission.identity.policy_id,
+        policy_digest=admission.identity.policy_digest,
+    ))
     assert admission.machine.state.value == "verified"
 
 
@@ -258,3 +277,44 @@ def test_enforcement_cannot_predate_authority_revocation():
             },
             events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
         ).with_runtime_pinned_evidence(binding)
+
+
+def test_authority_record_must_bind_exact_execution_and_policy():
+    import hashlib
+    from agentcontain.evidence import canonical_json
+
+    binding = _binding()
+    binding["authority"]["record"]["policy_digest"] = "sha256:other-policy"
+    binding["authority"]["digest"] = "sha256:" + hashlib.sha256(
+        canonical_json(binding["authority"]["record"]).encode("utf-8")
+    ).hexdigest()
+    envelope = EvidenceEnvelope.from_execution(
+        execution={"execution_id": "e", "agent_id": "agent-1", "policy_id": "p", "policy_digest": "d", "epoch": 1, "runtime_id": "runtime-1"},
+        events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
+    )
+
+    with pytest.raises(ValueError, match="authority policy_digest does not match execution"):
+        envelope.with_runtime_pinned_evidence(binding)
+
+
+@pytest.mark.parametrize("can_execute", [True, None])
+def test_observation_must_explicitly_prove_non_executability(can_execute):
+    import hashlib
+    from agentcontain.evidence import canonical_json
+
+    binding = _binding()
+    record = binding["observation"]["record"]
+    if can_execute is None:
+        del record["can_execute"]
+    else:
+        record["can_execute"] = can_execute
+    binding["observation"]["digest"] = "sha256:" + hashlib.sha256(
+        canonical_json(record).encode("utf-8")
+    ).hexdigest()
+    envelope = EvidenceEnvelope.from_execution(
+        execution={"execution_id": "e", "agent_id": "agent-1", "policy_id": "p", "policy_digest": "d", "epoch": 1, "runtime_id": "runtime-1"},
+        events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
+    )
+
+    with pytest.raises(ValueError, match="does not prove non-executability"):
+        envelope.with_runtime_pinned_evidence(binding)
