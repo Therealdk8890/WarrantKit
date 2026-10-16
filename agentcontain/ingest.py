@@ -12,7 +12,7 @@ class EvidenceSink(Protocol):
     """Minimal downstream boundary for accepted evidence."""
 
     def submit(self, envelope: EvidenceEnvelope) -> EvidenceEnvelope:
-        """Accept evidence and return the accepted original."""
+        """Accept evidence and return a detached accepted snapshot."""
 
 
 class InMemoryEvidenceSink:
