@@ -7,7 +7,6 @@ be treated as runtime enforcement merely because it is present in a Policy.
 
 from __future__ import annotations
 
-from copy import deepcopy
 from dataclasses import dataclass, field
 import hashlib
 import json
