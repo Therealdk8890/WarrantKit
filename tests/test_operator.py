@@ -102,3 +102,27 @@ def test_operator_view_requires_explicit_verification_result_for_verified_status
     )
     assert verified_view.incident.status.value == "verified"
     assert verified_view.to_dict()["verification_result"]["status"] == "verified"
+
+
+def test_verification_event_alone_does_not_promote_observed_evidence():
+    from agentcontain.evidence import EvidenceEnvelope
+
+    policy = Policy(policy_id="payments", version=7)
+    document = _envelope(policy).to_dict()
+    document["verification"]["status"] = "observed"
+    document["events"].append(
+        {
+            "name": "verification_completed",
+            "execution_id": "exec-1",
+            "epoch": 3,
+            "sequence": 4,
+            "timestamp": "2026-09-27T00:00:03+00:00",
+            "details": {},
+        }
+    )
+
+    view = OperatorIncidentView.from_evidence(EvidenceEnvelope.from_dict(document))
+
+    assert view.incident.status.value == "contained"
+    assert view.incident.proof_status == "observed"
+    assert view.verification_result is None
