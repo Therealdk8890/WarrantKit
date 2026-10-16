@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Protocol
 from uuid import uuid4
 
-from .evidence import EvidenceEnvelope, validate_runtime_pinned_binding
+from .evidence import EvidenceEnvelope, canonical_json, validate_runtime_pinned_binding
 from .egress_binding import EgressBinding, UnsupportedEgressBinding, bind_allowed_egress
 from .fleet import FleetRegistry
 from .identity import ExecutionIdentity
@@ -389,7 +390,10 @@ def verify(admission: Admission, *, runtime_binding: dict | None = None):
         raise RuntimeError("runtime verification evidence is not durable")
     if runtime_binding is not None:
         validate_runtime_pinned_binding(runtime_binding, {
+            "execution_id": identity.execution_id,
             "agent_id": identity.agent_id,
+            "policy_id": identity.policy_id,
+            "policy_digest": identity.policy_digest,
             "epoch": identity.epoch,
             **({"runtime_id": identity.runtime_id} if identity.runtime_id is not None else {}),
         })
@@ -437,6 +441,19 @@ def runtime_pinned_evidence(
     authority.setdefault("runtime_id", runtime_id)
     authority.setdefault("agent_id", identity.agent_id)
     authority.setdefault("epoch", identity.epoch)
+    # Add the execution/policy binding to the canonical authority record before
+    # recomputing its structural digest. This is correlation metadata, not a
+    # claim that WarrantKit authenticated the runtime producer.
+    authority_record_payload = dict(authority.get("record", {}))
+    authority_record_payload.update({
+        "execution_id": identity.execution_id,
+        "policy_id": identity.policy_id,
+        "policy_digest": identity.policy_digest,
+    })
+    authority["record"] = authority_record_payload
+    authority["digest"] = "sha256:" + hashlib.sha256(
+        canonical_json(authority_record_payload).encode("utf-8")
+    ).hexdigest()
     required_authority = {"runtime_id", "agent_id", "epoch", "revoked", "revoked_at", "digest", "record"}
     if set(authority) != required_authority:
         raise ValueError("authority record has an invalid pinned-evidence shape")
