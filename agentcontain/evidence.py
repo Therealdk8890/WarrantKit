@@ -93,6 +93,13 @@ def validate_runtime_pinned_binding(
         for field in fields:
             if field in item and item[field] != record.get(field):
                 raise ValueError(f"runtime binding {label} {field} does not match record")
+    # Bind the authority evidence to the exact execution and accepted policy.
+    # Shared runtime/agent/epoch fields alone would allow authority evidence to
+    # be replayed across executions that happen to share a runtime epoch.
+    for field in ("execution_id", "policy_id", "policy_digest"):
+        if authority_record.get(field) != execution.get(field):
+            raise ValueError(f"runtime binding authority {field} does not match execution")
+
     if authority_record.get("revoked") is not True:
         raise ValueError("runtime binding requires explicit authority revocation evidence")
     if enforcement_record.get("action") not in {"KILL", "FENCE"}:
@@ -101,6 +108,8 @@ def validate_runtime_pinned_binding(
         raise ValueError("runtime binding enforcement must be external to the agent")
     if observation_record.get("state") not in {"TERMINATED", "FENCED", "contained", "halted"}:
         raise ValueError("runtime binding observation state must be TERMINATED, FENCED, contained, or halted")
+    if observation_record.get("can_execute") is not False:
+        raise ValueError("runtime binding observation does not prove non-executability")
 
     def _timestamp(label: str, value: Any):
         if isinstance(value, bool):
