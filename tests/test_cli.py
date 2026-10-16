@@ -162,7 +162,8 @@ def test_cli_inspects_evidence_file(tmp_path, capsys) -> None:
     assert "Agent:        agent-1" in output
     assert "Policy:       payments" in output
     assert "Event:        anomaly_detected" in output
-    assert "Status:       VERIFIED" in output
+    assert "Status:       CONTAINED" in output
+    assert "Reported proof status: verified" in output
     assert "2. anomaly_detected" in output
 
 
@@ -196,6 +197,8 @@ def test_cli_inspect_json_is_machine_readable(tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["agent"]["agent_id"] == "agent-2"
     assert payload["incident"]["execution_id"] == "exec-2"
+    assert payload["incident"]["status"] == "contained"
+    assert payload["verification_result"] is None
     assert payload["timeline"][0]["name"] == "admission_verified"
 
 
