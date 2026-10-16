@@ -197,7 +197,7 @@ def test_cli_inspect_json_is_machine_readable(tmp_path, capsys) -> None:
     payload = json.loads(capsys.readouterr().out)
     assert payload["agent"]["agent_id"] == "agent-2"
     assert payload["incident"]["execution_id"] == "exec-2"
-    assert payload["incident"]["status"] == "contained"
+    assert payload["incident"]["status"] == "open"
     assert payload["verification_result"] is None
     assert payload["timeline"][0]["name"] == "admission_verified"
 
