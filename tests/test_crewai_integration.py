@@ -156,7 +156,6 @@ def test_crewai_tool_rejects_replay_of_another_valid_signed_warrant() -> None:
 def test_crewai_tool_rejects_signed_warrant_that_exceeds_accepted_policy() -> None:
     """A valid signature must not let a Warrant exceed the accepted policy."""
     PaymentTool = _integration()
-    from datetime import datetime, timedelta, timezone
 
     from agentcontain.integrations.crewai import CrewAIWarrantError, wrap_crewai_tool
     from agentcontain.warrant import Warrant
@@ -170,19 +169,13 @@ def test_crewai_tool_rejects_signed_warrant_that_exceeds_accepted_policy() -> No
         runtime_id=engine.runtime_id,
         warrant_signer=signer,
     )
-    now = datetime.now(timezone.utc)
-    overbroad_warrant = Warrant.issue(
-        warrant_id="overbroad-crewai-warrant",
-        issuer="warrantkit",
-        agent_id=admission.identity.agent_id,
-        execution_id=admission.identity.execution_id,
-        policy=admission.policy,
-        runtime_id=engine.runtime_id,
-        epoch=admission.identity.epoch,
-        issued_at=now,
-        expires_at=now + timedelta(minutes=5),
-        capabilities=("payments_refund", "admin"),
-    )
+
+    # Simulate a correctly signed but overbroad serialized Warrant. The
+    # supported issue() API must reject this input, so mutate the payload
+    # before signing it to exercise the adapter's independent policy check.
+    payload = admission.warrant.to_dict()
+    payload["authority"]["capabilities"] = ["payments_refund", "admin"]
+    overbroad_warrant = Warrant.from_dict(payload)
     admission.warrant = overbroad_warrant
     admission.warrant_attestation = signer.sign_warrant(overbroad_warrant).to_dict()
 

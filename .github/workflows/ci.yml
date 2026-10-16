@@ -64,6 +64,12 @@ jobs:
       - name: Verify portable evidence fixture
         run: python tools/verify_runtime_evidence.py tests/fixtures/runtime_pinned_evidence.json
 
+      - name: Install CrewAI integration dependencies
+        run: python -m pip install -e '.[crewai]'
+
+      - name: Run CrewAI adapter regression tests
+        run: python -m pytest -q tests/test_crewai_integration.py
+
       - name: Run OpenAI Agents adapter regression tests
         run: python -m pytest -q tests/test_openai_agents_integration.py
 
