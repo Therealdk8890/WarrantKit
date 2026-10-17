@@ -1,4 +1,4 @@
-"""Diagnostic reproducer for the pre-PR-196 lease TOCTOU window.
+""""Diagnostic reproducer for the pre-PR-196 lease TOCTOU window.
 
 This test is intentionally run against the vulnerable baseline commit by CI.
 It should PASS there by demonstrating the protected side effect executes after
@@ -7,6 +7,7 @@ The ordinary adapter regression test on the PR head asserts the opposite.
 """
 import asyncio
 import json
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -44,6 +45,10 @@ def _setup(agent_id: str, capability: str):
     return admission, gateway, verifier
 
 
+@pytest.mark.skipif(
+    os.environ.get("WARRANTKIT_RUN_VULNERABLE_BASELINE_REPRO") != "1",
+    reason="diagnostic must run only against the explicitly selected pre-fix baseline",
+)
 def test_pre_fix_wrapper_can_execute_after_epoch_changes_between_check_and_use(monkeypatch):
     import agentcontain.integrations.openai_agents as integration
 
