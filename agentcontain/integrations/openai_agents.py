@@ -77,6 +77,15 @@ def wrap_openai_tool(
 
     @wraps(function)
     def invoke_authorized(*args: Any, **kwargs: Any) -> Any:
+        # Pin the runtime lease before checking the Warrant. If containment or
+        # recovery occurs after verification, this exact lease becomes invalid;
+        # never acquire a fresh lease for an already-authorized invocation.
+        execution_lease = gateway.acquire_lease()
+        if execution_lease is None:
+            raise OpenAIAgentsWarrantError(
+                "runtime is not active; execution lease unavailable"
+            )
+
         verify_current_authority(
             admission,
             gateway,
@@ -104,8 +113,9 @@ def wrap_openai_tool(
             risk=risk,
             metadata={"framework": "openai-agents-sdk"},
         )
-        result = gateway.execute(
+        result = gateway.execute_with_lease(
             action,
+            execution_lease,
             lambda _action: function(*args, **kwargs),
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
