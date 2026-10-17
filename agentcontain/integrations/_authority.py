@@ -17,11 +17,12 @@ def verify_current_authority(
     error_type: Type[RuntimeError],
     framework: str,
 ) -> None:
-    """Fail closed unless the wrapped tool still has the exact accepted authority.
+    """Fail closed unless the wrapped tool has the exact accepted authority.
 
     Framework adapters must share this implementation so signature, identity,
     epoch, policy-capability ceiling, and runtime snapshot checks cannot drift.
-    The caller supplies only its framework-specific exception type and label.
+    The runtime snapshot, not the platform's cached ExecutionIdentity, is the
+    authority for whether the Warrant's epoch remains current.
     """
     def reject(message: str, cause: Exception | None = None) -> None:
         error = error_type(message)
@@ -69,7 +70,19 @@ def verify_current_authority(
         reject(
             f"WarrantKit {framework} integration requires an AgentContainment ActionGateway"
         )
+
+    # Take one atomic snapshot from the runtime owner immediately before the
+    # protected action. Never use admission.identity.epoch as the freshness
+    # source: it can remain stale if the controller crashes after fencing.
     snapshot = runtime.snapshot()
+    if snapshot.runtime_id != warrant.runtime.runtime_id:
+        reject("runtime snapshot runtime_id does not match Warrant")
+    if snapshot.agent_id != warrant.subject.agent_id:
+        reject("runtime snapshot agent_id does not match Warrant")
+    state = getattr(snapshot.state, "value", snapshot.state)
+    if state != "active" or snapshot.can_execute is not True:
+        reject("runtime is not active; Warrant authority is denied")
+
     try:
         verify_warrant(
             warrant,
