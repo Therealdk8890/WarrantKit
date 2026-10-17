@@ -3,11 +3,12 @@
 This test is intentionally run against the vulnerable baseline commit by CI.
 It should PASS there by demonstrating the protected side effect executes after
 containment and recovery happen between Warrant verification and gateway use.
-The ordinary adapter regression test on the PR head asserts the opposite.
+On the fixed tree it skips because the wrapper now consumes a lease pinned
+before verification, and the dedicated regression test asserts denial.
 """
 import asyncio
+import inspect
 import json
-import os
 from types import SimpleNamespace
 
 import pytest
@@ -45,12 +46,15 @@ def _setup(agent_id: str, capability: str):
     return admission, gateway, verifier
 
 
-@pytest.mark.skipif(
-    os.environ.get("WARRANTKIT_RUN_VULNERABLE_BASELINE_REPRO") != "1",
-    reason="diagnostic must run only against the explicitly selected pre-fix baseline",
-)
 def test_pre_fix_wrapper_can_execute_after_epoch_changes_between_check_and_use(monkeypatch):
     import agentcontain.integrations.openai_agents as integration
+
+    # The ordinary suite also discovers this diagnostic file on the patched
+    # tree. Do not treat a fixed wrapper's expected denial as a failed exploit
+    # reproduction; the dedicated regression test covers that behavior.
+    wrapper_source = inspect.getsource(integration.wrap_openai_tool)
+    if "execute_with_lease" in wrapper_source:
+        pytest.skip("patched wrapper binds authorization to the execution lease")
 
     calls: list[str] = []
 
