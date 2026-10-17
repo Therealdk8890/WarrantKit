@@ -116,3 +116,29 @@ def test_openai_agents_adapter_rejects_async_function() -> None:
         wrap_openai_tool(
             async_write, admission, gateway, warrant_verifier=verifier
         )
+
+
+
+def test_openai_agents_tool_rejects_execution_if_runtime_epoch_changes_after_warrant_check(monkeypatch) -> None:
+    """A tool cannot reuse a fresh lease after its pre-check authority goes stale."""
+    import agentcontain.integrations.openai_agents as integration
+    from agentcontain import issue_recovery_authorization, recover
+
+    calls: list[str] = []
+
+    def protected_write(value: str) -> str:
+        calls.append(value)
+        return "written"
+
+    engine, admission, gateway, verifier = _setup(
+        "openai-agents-toctou", "protected_write"
+    )
+    protected = integration.wrap_openai_tool(
+        protected_write, admission, gateway, warrant_verifier=verifier
+    )
+    original_check = integration.verify_current_authority
+
+    monkeypatch.setattr(integration, "verify_current_authority", check_then_contain)
+    with pytest.raises(integration.OpenAIAgentsWarrantError):
+        _invoke(protected, {"value": "must-not-run"})
+    assert calls == []
