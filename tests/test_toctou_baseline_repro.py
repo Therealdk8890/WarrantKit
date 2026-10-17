@@ -1,4 +1,4 @@
-""""Diagnostic reproducer for the pre-PR-196 lease TOCTOU window.
+"""Diagnostic reproducer for the pre-PR-196 lease TOCTOU window.
 
 This test is intentionally run against the vulnerable baseline commit by CI.
 It should PASS there by demonstrating the protected side effect executes after
