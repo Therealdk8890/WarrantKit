@@ -81,6 +81,14 @@ def wrap_langchain_tool(
     required_capability = capability or operation
 
     def invoke_authorized(**kwargs: Any) -> Any:
+        # Pin the runtime lease before checking the Warrant. If containment or
+        # recovery occurs after verification, this exact lease becomes invalid;
+        # never acquire a fresh lease for an already-authorized invocation.
+        execution_lease = gateway.acquire_lease()
+        if execution_lease is None:
+            raise LangChainWarrantError(
+                "runtime is not active; execution lease unavailable"
+            )
         _verify_current_authority(admission, gateway, warrant_verifier, expected_snapshot)
         warrant = admission.warrant
         assert warrant is not None
@@ -99,8 +107,9 @@ def wrap_langchain_tool(
             risk=risk,
             metadata={"framework": "langchain"},
         )
-        result = gateway.execute(
+        result = gateway.execute_with_lease(
             action,
+            execution_lease,
             lambda _action: tool.invoke(kwargs),
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
