@@ -119,10 +119,10 @@ def test_openai_agents_adapter_rejects_async_function() -> None:
 
 
 
+
 def test_openai_agents_tool_rejects_execution_if_runtime_epoch_changes_after_warrant_check(monkeypatch) -> None:
     """A tool cannot reuse a fresh lease after its pre-check authority goes stale."""
     import agentcontain.integrations.openai_agents as integration
-    from agentcontain import issue_recovery_authorization, recover
 
     calls: list[str] = []
 
@@ -137,6 +137,12 @@ def test_openai_agents_tool_rejects_execution_if_runtime_epoch_changes_after_war
         protected_write, admission, gateway, warrant_verifier=verifier
     )
     original_check = integration.verify_current_authority
+
+    def check_then_contain(*args, **kwargs):
+        # Verification succeeds at epoch 0, then the runtime fences before
+        # ActionGateway consumes the lease acquired by the wrapper.
+        original_check(*args, **kwargs)
+        engine.controller.contain()
 
     monkeypatch.setattr(integration, "verify_current_authority", check_then_contain)
     with pytest.raises(integration.OpenAIAgentsWarrantError):
