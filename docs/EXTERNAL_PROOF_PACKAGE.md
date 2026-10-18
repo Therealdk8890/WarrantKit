@@ -107,5 +107,6 @@ Never provide production credentials or an unrestricted downstream API key to th
 - [Threat model](THREAT_MODEL.md)
 - [Implementation status and proof scope](INTEGRATIONS_AND_PROOFS.md#implementation-status)
 - [Design-partner validation](DESIGN_PARTNER_VALIDATION.md)
+- [External evaluation record template](EXTERNAL_EVALUATION_RECORD.md) — record environment, proof outcomes, trust-anchor provenance, failures, and next steps consistently.
 
 A successful demonstration is evidence for the tested revision and environment—not a claim of universal isolation, complete production readiness, or protection against a compromised host or kernel.
