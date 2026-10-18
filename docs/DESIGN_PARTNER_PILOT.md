@@ -6,6 +6,12 @@ Validate whether organizations operating autonomous agents will pay for runtime 
 
 The pilot is intentionally narrow. It should prove customer value before expanding the product surface.
 
+## Product and enforcement boundary
+
+WarrantKit is the authority-lifecycle and evidence layer. AgentContainment is the separate runtime enforcement engine used for the security-critical gateway and host-containment paths. The pilot must test the actual boundary in the selected deployment, not treat a signed Warrant or evidence receipt as enforcement by itself.
+
+The pilot must also document any route that can bypass the gateway. If an agent or tool can reach a protected service directly with unrestricted credentials, the gateway is advisory for that route. Keep real downstream credentials outside the agent process wherever practical.
+
 ## Pilot promise
 
 For one consequential autonomous workflow, WarrantKit will coordinate the authority lifecycle and evidence, using the AgentContainment engine for the security-critical runtime enforcement path:
@@ -81,6 +87,17 @@ At the end of the pilot, determine:
 - what would block production purchase
 
 Do not manufacture ROI. Establish the baseline and calculate value from customer-confirmed inputs.
+
+## Proof selection and prerequisites
+
+Select the smallest proof that answers the customer's question and state its limits before the session:
+
+1. **Portable lifecycle demo** (`warrantkit demo`): orientation only; it is simulated and does not establish kernel process termination.
+2. **Framework-to-gateway proof** (`python tools/run_authority_boundary_demo.py`): demonstrates a protected tool side effect before containment and rejection of a retained pre-containment Warrant before the next side effect. It does not prove host-level process termination or protect bypass routes.
+3. **Linux cgroup-v2 real-kill proof**: use [the real-kill guide](REAL_KILL_DEMO.md) on a compatible Linux host with root or equivalent delegated cgroup privileges. Record the exact commit, host prerequisites, output, and artifacts.
+4. **Raw MCP handler proof**: use [the MCP integration guide](MCP_SERVER_INTEGRATION.md) only for synchronous Python handlers registered through the wrapped function. It does not cover remote/hosted MCP tools or async-native handlers.
+
+Never represent a simulated result as a host-enforcement result. Keep customer secrets and production credentials out of the test. A successful proof is evidence for the tested configuration, not a universal host-isolation guarantee.
 
 ## Pilot phases
 
