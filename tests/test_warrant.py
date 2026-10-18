@@ -166,6 +166,7 @@ def test_verifier_rejects_serialized_warrant_with_unsupported_constraints() -> N
         (lambda doc: doc["authority"].update(capabilities="read"), "list of non-empty strings"),
         (lambda doc: doc["runtime"].update(epoch=True), "non-negative integer"),
         (lambda doc: doc["validity"].update(issued_at=123), "ISO-8601 string"),
+        (lambda doc: doc["lifecycle"].update(state="revoked", revoked_at="2026-01-01T00:02:00"), "timezone-aware"),
         (lambda doc: doc["evidence_requirements"].pop("verification"), "evidence_requirements has an invalid shape"),
     ],
 )
