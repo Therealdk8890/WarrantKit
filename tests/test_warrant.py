@@ -155,3 +155,22 @@ def test_verifier_rejects_serialized_warrant_with_unsupported_constraints() -> N
     constrained = Warrant.from_dict(document)
     with pytest.raises(ValueError, match="constraint semantics"):
         _verify(constrained)
+
+
+@pytest.mark.parametrize(
+    ("mutate", "match"),
+    [
+        (lambda doc: doc["authority"].pop("capabilities"), "authority has an invalid shape"),
+        (lambda doc: doc["subject"].update(extra="ignored"), "subject has an invalid shape"),
+        (lambda doc: doc["authority"].update(constraints={"resource": 7}), "string-to-string mapping"),
+        (lambda doc: doc["authority"].update(capabilities="read"), "list of non-empty strings"),
+        (lambda doc: doc["runtime"].update(epoch=True), "non-negative integer"),
+        (lambda doc: doc["validity"].update(issued_at=123), "ISO-8601 string"),
+        (lambda doc: doc["evidence_requirements"].pop("verification"), "evidence_requirements has an invalid shape"),
+    ],
+)
+def test_from_dict_rejects_malformed_nested_schema(mutate, match) -> None:
+    document = _warrant().to_dict()
+    mutate(document)
+    with pytest.raises((TypeError, ValueError), match=match):
+        Warrant.from_dict(document)
