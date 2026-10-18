@@ -152,6 +152,8 @@ WarrantKit complements rather than replaces IAM, policy engines, host isolation,
 
 ## Further reading
 
+- [External proof package: reproduce, inspect, and verify WarrantKit evidence](docs/EXTERNAL_PROOF_PACKAGE.md)
+
 - [Incident bundle API and trust model](docs/INCIDENT_BUNDLE_API.md)
 
 - [Raw MCP server integration and limitations](docs/MCP_SERVER_INTEGRATION.md)
