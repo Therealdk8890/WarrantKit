@@ -60,6 +60,21 @@ jobs:
       - name: Verify package metadata
         run: |
           python -c 'import importlib.metadata as m, pathlib, tomllib; expected=tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]; assert m.version("warrantkit") == expected'
+      - name: Verify README release version
+        run: |
+          python - <<'PY'
+          import pathlib
+          import tomllib
+
+          version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
+          readme = pathlib.Path("README.md").read_text()
+          assert f"Latest release: [`warrantkit {version}`]" in readme, (
+              "README latest-release label does not match pyproject.toml"
+          )
+          assert f"warrantkit=={version}" in readme, (
+              "README pinned install command does not match pyproject.toml"
+          )
+          PY
 
       - name: Verify portable evidence fixture
         run: python tools/verify_runtime_evidence.py tests/fixtures/runtime_pinned_evidence.json
