@@ -21,6 +21,7 @@ The optional framework adapters are installed separately when needed:
 python -m pip install "warrantkit[langchain]"
 python -m pip install "warrantkit[crewai]"
 python -m pip install "warrantkit[openai-agents]"
+python -m pip install "warrantkit[mcp]"  # synchronous Python handlers on raw MCP servers
 ```
 
 The portable `warrantkit demo` is a simulated lifecycle demonstration, not proof of kernel-level process containment. For the strongest containment claim, use the environment-gated Linux cgroup-v2 proof described below.
@@ -39,7 +40,7 @@ The current OSS implementation is a local authority-lifecycle and runtime-enforc
 |---|---|---|
 | Warrant admission and runtime-epoch fencing | Implemented and CI-tested | A Warrant tied to an older runtime epoch is rejected; epoch fencing does not undo side effects already completed. |
 | Controller-owned ActionGateway enforcement | Implemented and covered by the framework boundary proof | The adapter checks the Warrant before invoking the gateway; the gateway independently enforces its controller-owned execution lease. A serialized Warrant is not a gateway bearer credential. |
-| Framework adapters | LangChain and CrewAI adapters; OpenAI Agents SDK local function-tool adapter | Do not infer support for hosted tools, arbitrary external side-effect paths, or async-native execution. |
+| Framework / tool adapters | LangChain and CrewAI adapters; OpenAI Agents SDK local function-tool adapter; raw MCP synchronous Python-handler wrapper | Hosted tools, remote MCP servers, async-native MCP execution, and alternate side-effect paths are not automatically protected. |
 | Real process containment | Linux cgroup-v2 proof implemented and exercised in privileged CI | Requires Linux and suitable root/delegated cgroup privileges. It is not a universal host-isolation guarantee. |
 | Evidence and incident bundles | Bundle writer, standalone verifier, and optional Ed25519-authenticated Warrant/receipt artifacts | A trusted public key must be provisioned independently. Internal consistency or a valid signature does not prove the underlying claim is true. |
 | ClaimProofKit provenance integration | CI test uses ClaimProofKit's public APIs to create a claim report and provenance trace, then round-trips it through a signed WarrantKit incident bundle | The test validates provenance integrity and records the verifier verdict separately; claim truth and runtime enforcement are not established by provenance alone. |
@@ -153,6 +154,10 @@ WarrantKit complements rather than replaces IAM, policy engines, host isolation,
 
 - [Incident bundle API and trust model](docs/INCIDENT_BUNDLE_API.md)
 
+- [Raw MCP server integration and limitations](docs/MCP_SERVER_INTEGRATION.md)
+- [Design-partner program](docs/DESIGN_PARTNER_PROGRAM.md)
+- [Design-partner validation guide](docs/DESIGN_PARTNER_VALIDATION.md)
+- [Design-partner pilot](docs/DESIGN_PARTNER_PILOT.md)
 - [Threat model](docs/THREAT_MODEL.md)
 - [Real-kill demo requirements and evidence interpretation](docs/REAL_KILL_DEMO.md)
 - [Trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md)
