@@ -4,16 +4,16 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/warrantkit)](https://pypi.org/project/warrantkit/)
 
-**Latest release: [`warrantkit 0.1.4`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.1.4)** · [PyPI package](https://pypi.org/project/warrantkit/)
+**Latest release: [`warrantkit 0.1.5`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.1.5)** · [PyPI package](https://pypi.org/project/warrantkit/)
 
-**Next release target: `v0.1.5` — External Proof Package and Evaluation Readiness.** The current published-install instructions below remain pinned to `0.1.4` until `v0.1.5` is released.
+**Release focus:** External Proof Package and Evaluation Readiness.
 
 ## Install the published package
 
-WarrantKit 0.1.4 is published on PyPI. It requires Python 3.11 or newer.
+WarrantKit 0.1.5 is published on PyPI. It requires Python 3.11 or newer.
 
 ```bash
-python -m pip install --upgrade warrantkit==0.1.4
+python -m pip install --upgrade warrantkit==0.1.5
 warrantkit demo
 ```
 
