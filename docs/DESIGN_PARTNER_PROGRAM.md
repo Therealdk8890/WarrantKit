@@ -6,6 +6,19 @@ Validate WarrantKit against teams that already operate autonomous or coding agen
 
 The goal is not to collect generic feedback. The goal is to discover whether the external authority, hard-stop enforcement, epoch lifecycle, and independently verifiable evidence model solve a problem important enough to change deployment behavior or justify paid operational capabilities.
 
+## Product boundary and current proof options
+
+WarrantKit coordinates authority lifecycle, policy-bound Warrants, gateway integration, and evidence. AgentContainment remains the separate runtime enforcement engine. Evidence and signatures support verification; they do not themselves grant authority, prove every underlying claim true, or establish host integrity.
+
+Choose a proof based on the claim under evaluation:
+
+- `warrantkit demo`: portable orientation; simulated lifecycle, not kernel process containment.
+- `python tools/run_authority_boundary_demo.py`: framework-to-gateway boundary; tests rejection of retained stale authority before a subsequent protected side effect.
+- [Linux cgroup-v2 real-kill proof](REAL_KILL_DEMO.md): host process-containment evidence, requiring Linux and suitable root/delegated cgroup privileges.
+- [Raw MCP integration](MCP_SERVER_INTEGRATION.md): synchronous Python handlers only; not remote/hosted MCP tools or async-native execution.
+
+For every proof, record the exact source revision, environment, observed result, and limitations. Do not claim a broader guarantee than the tested path supports.
+
 ## Target profile
 
 Prioritize teams with one or more of:
