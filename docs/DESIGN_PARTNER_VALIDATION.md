@@ -8,6 +8,19 @@ Do teams with real agent workloads need an independently enforced authority life
 
 The core hypothesis is specific: when an agent must be contained, the operator needs more than a model instruction, application callback, or sandbox boundary. They need an external enforcement path, stale-authority rejection, and evidence that distinguishes what was observed from what was verified.
 
+## Product boundary and claims to test
+
+WarrantKit coordinates the authority lifecycle and evidence; AgentContainment is the separate runtime enforcement engine. Test the integration at the actual protected side-effect boundary. A valid Warrant is not a gateway bearer credential, and a signed receipt does not prove every underlying claim true or establish that the host is uncompromised.
+
+Use the narrowest relevant proof and describe its claim precisely:
+
+- **Portable demo:** simulated lifecycle only; no kernel process-kill claim.
+- **Framework-to-gateway proof:** stale authority is rejected before the second protected side effect; does not prove host process termination or cover bypass routes.
+- **Linux cgroup-v2 real-kill proof:** host process-containment path under the documented Linux and privilege prerequisites.
+- **Raw MCP handler integration:** synchronous Python handlers registered through the wrapper; does not cover remote/hosted MCP tools or async-native MCP execution.
+
+A key qualification question is whether the agent can bypass the protected gateway using direct credentials or another route. If so, record the gap explicitly rather than treating the gateway as an effective control for that route.
+
 ## Target participants
 
 Start with **5–10 interviews**. Prioritize people who own or operate agent execution in staging or production:
