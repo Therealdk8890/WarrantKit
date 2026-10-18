@@ -60,3 +60,29 @@ def test_import_rejects_malformed_timestamps(value):
     expected = "issued_at must be a non-empty string" if not isinstance(value, str) else "valid ISO-8601 strings"
     with pytest.raises(ValueError, match=expected):
         import_authorization(document, policy=policy, runtime_id="runtime-1", epoch=0, now=NOW)
+
+def test_import_rejects_expired_authorization_when_now_is_omitted():
+    policy = Policy("production", capabilities=("read",))
+    document = _document(policy)
+    expired_at = datetime.now(timezone.utc) - timedelta(minutes=10)
+    document["issued_at"] = (expired_at - timedelta(minutes=5)).isoformat()
+    document["expires_at"] = expired_at.isoformat()
+
+    with pytest.raises(ValueError, match="outside its validity window"):
+        import_authorization(
+            document, policy=policy, runtime_id="runtime-1", epoch=0
+        )
+
+
+def test_import_rejects_naive_explicit_verification_time():
+    policy = Policy("production", capabilities=("read",))
+    document = _document(policy)
+
+    with pytest.raises(ValueError, match="verification time must be timezone-aware"):
+        import_authorization(
+            document,
+            policy=policy,
+            runtime_id="runtime-1",
+            epoch=0,
+            now=datetime(2026, 1, 1),
+        )
