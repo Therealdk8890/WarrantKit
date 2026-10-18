@@ -200,25 +200,92 @@ class Warrant:
 
     @classmethod
     def from_dict(cls, document: Mapping[str, Any]) -> "Warrant":
+        """Parse the exact v1 serialized schema without coercing malformed input."""
         if not isinstance(document, Mapping):
             raise TypeError("warrant must be a mapping")
+
         expected = {
             "schema_version", "warrant_id", "issuer", "subject", "authority",
             "runtime", "validity", "lifecycle", "evidence_requirements",
         }
         if set(document) != expected:
             raise ValueError("warrant has an invalid shape")
-        subject = document["subject"]
-        authority = document["authority"]
-        runtime = document["runtime"]
-        validity = document["validity"]
-        lifecycle = document["lifecycle"]
-        requirements = document["evidence_requirements"]
-        if not all(isinstance(x, Mapping) for x in (subject, authority, runtime, validity, lifecycle, requirements)):
-            raise TypeError("warrant nested fields must be mappings")
-        constraints = authority.get("constraints", {})
-        if not isinstance(constraints, Mapping):
-            raise TypeError("warrant constraints must be a mapping")
+
+        nested_fields = {
+            "subject": {"agent_id", "execution_id"},
+            "authority": {"policy_id", "policy_digest", "capabilities", "constraints"},
+            "runtime": {"runtime_id", "epoch"},
+            "validity": {"issued_at", "expires_at"},
+            "lifecycle": {"state", "revoked_at"},
+            "evidence_requirements": {"enforcement", "observation", "verification"},
+        }
+        nested = {}
+        for name, keys in nested_fields.items():
+            value = document[name]
+            if not isinstance(value, Mapping) or set(value) != keys:
+                raise ValueError(f"warrant {name} has an invalid shape")
+            nested[name] = value
+
+        def require_non_empty_string(value: object, field_name: str) -> str:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"warrant {field_name} must be a non-empty string")
+            return value
+
+        def require_string_list(value: object, field_name: str) -> tuple[str, ...]:
+            if not isinstance(value, list) or any(
+                not isinstance(item, str) or not item.strip() for item in value
+            ):
+                raise ValueError(f"warrant {field_name} must be a list of non-empty strings")
+            return tuple(value)
+
+        subject = nested["subject"]
+        authority = nested["authority"]
+        runtime = nested["runtime"]
+        validity = nested["validity"]
+        lifecycle = nested["lifecycle"]
+        requirements = nested["evidence_requirements"]
+
+        for name in ("warrant_id", "issuer", "schema_version"):
+            require_non_empty_string(document[name], name)
+        for name in ("agent_id", "execution_id"):
+            require_non_empty_string(subject[name], f"subject.{name}")
+        for name in ("policy_id", "policy_digest"):
+            require_non_empty_string(authority[name], f"authority.{name}")
+        require_non_empty_string(runtime["runtime_id"], "runtime.runtime_id")
+        if isinstance(runtime["epoch"], bool) or not isinstance(runtime["epoch"], int) or runtime["epoch"] < 0:
+            raise ValueError("warrant runtime.epoch must be a non-negative integer")
+
+        raw_constraints = authority["constraints"]
+        if not isinstance(raw_constraints, Mapping) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            for key, value in raw_constraints.items()
+        ):
+            raise ValueError("warrant authority.constraints must be a string-to-string mapping")
+
+        timestamp_values = {}
+        for name in ("issued_at", "expires_at"):
+            raw = validity[name]
+            if not isinstance(raw, str) or not raw.strip():
+                raise ValueError(f"warrant validity.{name} must be an ISO-8601 string")
+            try:
+                timestamp_values[name] = datetime.fromisoformat(raw)
+            except ValueError as exc:
+                raise ValueError(f"warrant validity.{name} must be an ISO-8601 string") from exc
+
+        state = lifecycle["state"]
+        if not isinstance(state, str):
+            raise ValueError("warrant lifecycle.state must be a string")
+        raw_revoked_at = lifecycle["revoked_at"]
+        if raw_revoked_at is None:
+            revoked_at = None
+        elif isinstance(raw_revoked_at, str) and raw_revoked_at.strip():
+            try:
+                revoked_at = datetime.fromisoformat(raw_revoked_at)
+            except ValueError as exc:
+                raise ValueError("warrant lifecycle.revoked_at must be an ISO-8601 string or null") from exc
+        else:
+            raise ValueError("warrant lifecycle.revoked_at must be an ISO-8601 string or null")
+
         return cls(
             warrant_id=document["warrant_id"],
             issuer=document["issuer"],
@@ -226,22 +293,19 @@ class Warrant:
             authority=WarrantAuthority(
                 authority["policy_id"],
                 authority["policy_digest"],
-                tuple(authority.get("capabilities", ())),
-                tuple(sorted((str(k), str(v)) for k, v in constraints.items())),
+                require_string_list(authority["capabilities"], "authority.capabilities"),
+                tuple(sorted(raw_constraints.items())),
             ),
             runtime=WarrantRuntime(runtime["runtime_id"], runtime["epoch"]),
             validity=WarrantValidity(
-                datetime.fromisoformat(validity["issued_at"]),
-                datetime.fromisoformat(validity["expires_at"]),
+                timestamp_values["issued_at"],
+                timestamp_values["expires_at"],
             ),
-            lifecycle=WarrantLifecycle(
-                RevocationState(lifecycle["state"]),
-                datetime.fromisoformat(lifecycle["revoked_at"]) if lifecycle.get("revoked_at") else None,
-            ),
+            lifecycle=WarrantLifecycle(RevocationState(state), revoked_at),
             evidence_requirements=EvidenceRequirements(
-                tuple(requirements.get("enforcement", ())),
-                tuple(requirements.get("observation", ())),
-                tuple(requirements.get("verification", ())),
+                require_string_list(requirements["enforcement"], "evidence_requirements.enforcement"),
+                require_string_list(requirements["observation"], "evidence_requirements.observation"),
+                require_string_list(requirements["verification"], "evidence_requirements.verification"),
             ),
             schema_version=document["schema_version"],
         )
