@@ -193,9 +193,12 @@ def import_authorization(
         runtime_id=runtime_id,
         epoch=epoch,
     )
-    if now is not None:
-        if now.tzinfo is None:
-            raise ValueError("verification time must be timezone-aware")
-        if now < warrant.validity.issued_at or now >= warrant.validity.expires_at:
-            raise ValueError("external authorization is outside its validity window")
+    verification_time = now or datetime.now(timezone.utc)
+    if verification_time.tzinfo is None or verification_time.utcoffset() is None:
+        raise ValueError("verification time must be timezone-aware")
+    if (
+        verification_time < warrant.validity.issued_at
+        or verification_time >= warrant.validity.expires_at
+    ):
+        raise ValueError("external authorization is outside its validity window")
     return warrant
