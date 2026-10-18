@@ -131,3 +131,27 @@ def test_warrant_issue_rejects_capabilities_not_granted_by_policy() -> None:
             issued_at=now, expires_at=now + timedelta(minutes=5),
             capabilities=("read", "write"),
         )
+
+
+def test_warrant_issue_rejects_unsupported_constraints() -> None:
+    policy = Policy("production", capabilities=("read",))
+    identity = ExecutionIdentity.create(
+        "agent-1", policy.policy_id, policy.digest, runtime_id="runtime-1"
+    )
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="constraint semantics"):
+        Warrant.issue(
+            warrant_id="w-constrained", issuer="controller",
+            agent_id=identity.agent_id, execution_id=identity.execution_id,
+            policy=policy, runtime_id="runtime-1", epoch=0,
+            issued_at=now, expires_at=now + timedelta(minutes=5),
+            capabilities=("read",), constraints=(("resource", "production"),),
+        )
+
+
+def test_verifier_rejects_serialized_warrant_with_unsupported_constraints() -> None:
+    document = _warrant().to_dict()
+    document["authority"]["constraints"] = {"resource": "production"}
+    constrained = Warrant.from_dict(document)
+    with pytest.raises(ValueError, match="constraint semantics"):
+        _verify(constrained)
