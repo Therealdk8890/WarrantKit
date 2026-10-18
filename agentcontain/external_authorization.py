@@ -136,21 +136,57 @@ def import_authorization(
     }
     if set(document) != required:
         raise ValueError("external authorization has an invalid shape")
-    issued_at = datetime.fromisoformat(str(document["issued_at"]))
-    expires_at = datetime.fromisoformat(str(document["expires_at"]))
+
+    string_fields = (
+        "schema_version",
+        "decision_id",
+        "issuer",
+        "subject_agent_id",
+        "subject_execution_id",
+        "policy_id",
+        "policy_digest",
+        "issued_at",
+        "expires_at",
+        "decision",
+    )
+    for field_name in string_fields:
+        value = document[field_name]
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"external authorization {field_name} must be a non-empty string")
+
+    raw_capabilities = document["capabilities"]
+    if not isinstance(raw_capabilities, list) or any(
+        not isinstance(capability, str) or not capability.strip()
+        for capability in raw_capabilities
+    ):
+        raise ValueError("external authorization capabilities must be a list of non-empty strings")
+
+    raw_constraints = document["constraints"]
+    if not isinstance(raw_constraints, dict) or any(
+        not isinstance(key, str) or not isinstance(value, str)
+        for key, value in raw_constraints.items()
+    ):
+        raise ValueError("external authorization constraints must be an object of string keys and values")
+
+    try:
+        issued_at = datetime.fromisoformat(document["issued_at"])
+        expires_at = datetime.fromisoformat(document["expires_at"])
+    except ValueError as exc:
+        raise ValueError("external authorization timestamps must be valid ISO-8601 strings") from exc
+
     decision = ExternalAuthorizationDecision(
-        decision_id=str(document["decision_id"]),
-        issuer=str(document["issuer"]),
-        subject_agent_id=str(document["subject_agent_id"]),
-        subject_execution_id=str(document["subject_execution_id"]),
-        policy_id=str(document["policy_id"]),
-        policy_digest=str(document["policy_digest"]),
-        capabilities=tuple(document["capabilities"]),  # type: ignore[arg-type]
-        constraints=tuple((str(k), str(v)) for k, v in dict(document["constraints"]).items()),  # type: ignore[arg-type]
+        decision_id=document["decision_id"],
+        issuer=document["issuer"],
+        subject_agent_id=document["subject_agent_id"],
+        subject_execution_id=document["subject_execution_id"],
+        policy_id=document["policy_id"],
+        policy_digest=document["policy_digest"],
+        capabilities=tuple(raw_capabilities),
+        constraints=tuple(raw_constraints.items()),
         issued_at=issued_at,
         expires_at=expires_at,
-        decision=str(document["decision"]),
-        schema_version=str(document["schema_version"]),
+        decision=document["decision"],
+        schema_version=document["schema_version"],
     )
     warrant = decision.to_warrant(
         policy=policy,
