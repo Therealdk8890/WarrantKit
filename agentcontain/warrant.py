@@ -127,6 +127,11 @@ class Warrant:
         requested_capabilities = tuple(capabilities)
         if set(requested_capabilities) - policy_capabilities:
             raise ValueError("warrant capabilities exceed accepted policy")
+        requested_constraints = tuple(constraints)
+        if requested_constraints:
+            raise ValueError(
+                "warrant constraints are unsupported until accepted policy defines constraint semantics"
+            )
         return cls(
             warrant_id=warrant_id,
             issuer=issuer,
@@ -135,7 +140,7 @@ class Warrant:
                 policy_id=policy.policy_id,
                 policy_digest=policy_digest,
                 capabilities=requested_capabilities,
-                constraints=tuple(constraints),
+                constraints=requested_constraints,
             ),
             runtime=WarrantRuntime(runtime_id, epoch),
             validity=WarrantValidity(issued_at, expires_at),
@@ -265,6 +270,10 @@ def verify_warrant(
     """
     if not isinstance(warrant, Warrant):
         raise TypeError("warrant must be a Warrant")
+    if warrant.authority.constraints:
+        raise ValueError(
+            "warrant constraints are unsupported until accepted policy defines constraint semantics"
+        )
     if warrant.lifecycle.state != RevocationState.ACTIVE:
         raise ValueError("warrant is revoked")
     if warrant.subject.execution_id != execution_id:
