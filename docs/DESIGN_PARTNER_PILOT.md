@@ -1,4 +1,4 @@
-# AgentContain Design-Partner Pilot
+# WarrantKit Design-Partner Pilot
 
 ## Objective
 
@@ -8,7 +8,7 @@ The pilot is intentionally narrow. It should prove customer value before expandi
 
 ## Pilot promise
 
-For one consequential autonomous workflow, AgentContain will:
+For one consequential autonomous workflow, WarrantKit will coordinate the authority lifecycle and evidence, using the AgentContainment engine for the security-critical runtime enforcement path:
 
 1. establish execution identity
 2. define the authorized boundary
@@ -160,7 +160,7 @@ Use these before expanding the pilot:
 3. Who owns that incident?
 4. What evidence do they have afterward?
 5. What evidence do auditors or security leadership ask for?
-6. Which existing security product should AgentContain integrate with rather than replace?
+6. Which existing security product should WarrantKit integrate with rather than replace?
 7. What deployment boundary is acceptable?
 8. What latency or availability requirements exist?
 9. What would make this a production requirement rather than an interesting security experiment?
