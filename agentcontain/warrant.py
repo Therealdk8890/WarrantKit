@@ -283,6 +283,8 @@ class Warrant:
                 revoked_at = datetime.fromisoformat(raw_revoked_at)
             except ValueError as exc:
                 raise ValueError("warrant lifecycle.revoked_at must be an ISO-8601 string or null") from exc
+            if revoked_at.tzinfo is None or revoked_at.utcoffset() is None:
+                raise ValueError("warrant lifecycle.revoked_at must be timezone-aware")
         else:
             raise ValueError("warrant lifecycle.revoked_at must be an ISO-8601 string or null")
 
