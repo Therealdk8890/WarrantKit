@@ -334,3 +334,38 @@ def test_non_finite_runtime_timestamp_is_rejected():
 
     with pytest.raises(ValueError):
         envelope.with_runtime_pinned_evidence(binding)
+
+
+@pytest.mark.parametrize(
+    ("section", "field", "outer_field"),
+    [
+        ("authority", "revoked_at", "revoked_at"),
+        ("enforcement", "occurred_at", "occurred_at"),
+        ("observation", "observed_at", "observed_at"),
+    ],
+)
+def test_runtime_binding_rejects_naive_record_timestamps(section, field, outer_field):
+    import hashlib
+    from agentcontain.evidence import canonical_json
+
+    binding = _binding()
+    record = dict(binding[section]["record"])
+    record[field] = "2026-09-30T17:00:00"
+    binding[section]["record"] = record
+    binding[section][outer_field] = record[field]
+    binding[section]["digest"] = "sha256:" + hashlib.sha256(
+        canonical_json(record).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="must include a UTC offset"):
+        EvidenceEnvelope.from_execution(
+            execution={
+                "execution_id": "e",
+                "agent_id": "agent-1",
+                "policy_id": "p",
+                "policy_digest": "d",
+                "epoch": 1,
+                "runtime_id": "runtime-1",
+            },
+            events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
+        ).with_runtime_pinned_evidence(binding)

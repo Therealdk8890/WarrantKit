@@ -75,15 +75,21 @@ def validate_runtime_pinned_binding(
     # or impossible ordering cannot be hidden behind a generic mismatch.
     if enforcement.get("external_boundary") is False:
         raise ValueError("runtime binding enforcement must be external to the agent")
+    def _parse_aware_timestamp(label: str, value: str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"runtime binding {label} timestamp is not ISO-8601") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError(f"runtime binding {label} timestamp must include a UTC offset")
+        return parsed
+
     observed_at = observation.get("observed_at")
     occurred_at = enforcement_record.get("occurred_at")
     if isinstance(observed_at, str) and isinstance(occurred_at, str):
-        try:
-            observed_time = datetime.fromisoformat(observed_at.replace("Z", "+00:00"))
-            occurred_time = datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
-        except ValueError:
-            observed_time = occurred_time = None
-        if observed_time is not None and occurred_time is not None and observed_time < occurred_time:
+        observed_time = _parse_aware_timestamp("observation observed_at", observed_at)
+        occurred_time = _parse_aware_timestamp("enforcement occurred_at", occurred_at)
+        if observed_time < occurred_time:
             raise ValueError("runtime binding observation predates enforcement")
 
     for label, item, record, fields in (
@@ -120,10 +126,7 @@ def validate_runtime_pinned_binding(
                 raise ValueError(f"runtime binding {label} timestamp must be finite")
             return value
         if isinstance(value, str):
-            try:
-                return datetime.fromisoformat(value.replace("Z", "+00:00"))
-            except ValueError as exc:
-                raise ValueError(f"runtime binding {label} timestamp is not ISO-8601") from exc
+            return _parse_aware_timestamp(label, value)
         raise ValueError(f"runtime binding {label} timestamp is required")
 
     times = [

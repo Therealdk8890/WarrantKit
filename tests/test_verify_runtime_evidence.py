@@ -118,3 +118,23 @@ def test_portable_verifier_rejects_event_without_epoch() -> None:
 
     with pytest.raises(ValueError, match="event epoch is required"):
         verifier.verify(document)
+
+
+@pytest.mark.parametrize(
+    ("section", "field"),
+    [
+        ("authority", "revoked_at"),
+        ("enforcement", "occurred_at"),
+        ("observation", "observed_at"),
+    ],
+)
+def test_portable_verifier_rejects_naive_runtime_timestamps(section, field):
+    document = make_evidence()
+    binding = document["proof"]["runtime_binding"]
+    record = dict(binding[section]["record"])
+    record[field] = "2026-01-01T00:00:00"
+    binding[section]["record"] = record
+    binding[section]["digest"] = verifier.digest_record(record)
+
+    with pytest.raises(ValueError, match="must include a UTC offset"):
+        verifier.verify(document)
