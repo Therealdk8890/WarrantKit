@@ -17,11 +17,25 @@ class CrashAfterEpochAdvanceEngine:
 
     def __init__(self) -> None:
         self.runtime_epoch = 0
+        self.controller = SimpleNamespace(runtime=self)
+        self.state = SimpleNamespace(value="active")
+        self.can_execute = True
+
+    def snapshot(self):
+        return SimpleNamespace(
+            runtime_id="runtime-crash-window",
+            agent_id="agent-crash-window",
+            epoch=self.runtime_epoch,
+            state=self.state,
+            can_execute=self.can_execute,
+        )
 
     def contain(self):
         # AgentContainment advances its runtime epoch before returning the
         # containment report. Simulate controller loss at that boundary.
         self.runtime_epoch += 1
+        self.state = SimpleNamespace(value="contained")
+        self.can_execute = False
         raise RuntimeError("simulated controller death before report delivery")
 
 
@@ -71,26 +85,31 @@ def test_old_warrant_is_rejected_when_controller_crashes_after_runtime_fence():
     old_warrant = admission.warrant
     assert old_warrant is not None
     assert old_warrant.runtime.epoch == 0
+    protected_snapshot = _expected_snapshot(admission)
 
-    # The runtime commits epoch 1, but the controller dies before WarrantKit
-    # receives a report and updates its cached ExecutionIdentity (still epoch 0).
+    # The runtime commits epoch 1, then raises before report delivery. WarrantKit
+    # must reconcile from the authoritative runtime snapshot, not the report.
     with pytest.raises(RuntimeError, match="controller death"):
         contain(admission)
 
     assert engine.runtime_epoch == 1
-    assert admission.identity.epoch == 0
+    assert admission.identity.epoch == 1
+    assert admission.warrant is not None
+    assert admission.warrant.lifecycle.state.value == "revoked"
+    assert admission.warrant_attestation is None
+    assert admission.machine.state.value == "contained"
 
     admission.warrant_attestation = {"test-only": "signed-warrant"}
     verifier = FakeWarrantVerifier()
     verifier.warrant = old_warrant
     runtime = RuntimeView(engine, state="contained", can_execute=False)
 
-    with pytest.raises(RuntimeError, match="runtime is not active"):
+    with pytest.raises(RuntimeError, match="admission authority changed"):
         verify_current_authority(
             admission,
             FakeGateway(runtime),
             verifier,
-            _expected_snapshot(admission),
+            protected_snapshot,
             error_type=RuntimeError,
             framework="crash-window test",
         )

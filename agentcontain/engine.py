@@ -314,7 +314,39 @@ def contain(admission: Admission) -> object:
     therefore records one atomic containment transition rather than pretending
     it controls the provider-level fence boundary.
     """
-    report = admission.engine.contain()
+    try:
+        report = admission.engine.contain()
+    except Exception:
+        # The runtime may have committed its fence before a later provider or
+        # controller operation raised. Revoke cached authority immediately;
+        # only reconcile the local epoch when the runtime itself proves the
+        # exact next epoch is non-executable. Never infer success from an
+        # exception or from the controller's cached report.
+        _revoke_warrant(admission)
+        controller = getattr(admission.engine, "controller", None)
+        runtime = getattr(controller, "runtime", None)
+        snapshot_method = getattr(runtime, "snapshot", None)
+        if callable(snapshot_method):
+            try:
+                snapshot = snapshot_method()
+                runtime_epoch = getattr(snapshot, "epoch", None)
+                runtime_state = getattr(getattr(snapshot, "state", None), "value", getattr(snapshot, "state", None))
+                can_execute = getattr(snapshot, "can_execute", None)
+                if (
+                    isinstance(runtime_epoch, int)
+                    and not isinstance(runtime_epoch, bool)
+                    and runtime_epoch == admission.identity.epoch + 1
+                    and runtime_state in {"contained", "halted"}
+                    and can_execute is False
+                ):
+                    admission.machine.start_new_epoch(runtime_epoch)
+                    admission.identity = admission.machine.identity
+                    admission.machine.contain()
+            except Exception:
+                # Reconciliation is best-effort only. The Warrant remains
+                # revoked and the original containment failure is preserved.
+                pass
+        raise
     report_epoch = getattr(report, "epoch", None)
 
     # A runtime can fence and advance its epoch before later enforcement
