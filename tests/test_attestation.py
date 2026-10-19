@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 
 import pytest
 
@@ -11,6 +11,14 @@ from agentcontain.attestation import (
 )
 from agentcontain.policy import Policy
 from agentcontain.warrant import Warrant
+
+
+class MissingOffsetTimezone(tzinfo):
+    def utcoffset(self, dt):
+        return None
+
+    def dst(self, dt):
+        return None
 
 
 def _warrant() -> Warrant:
@@ -145,3 +153,12 @@ def test_malformed_envelope_types_fail_closed() -> None:
     document["signature"] = 123
     with pytest.raises(ValueError, match="signature"):
         AttestationEnvelope.from_dict(document)
+
+
+def test_signer_rejects_issued_at_timezone_without_utc_offset() -> None:
+    signer = Ed25519Signer.generate("wk-test-invalid-timezone")
+    with pytest.raises(ValueError, match="issued_at must be timezone-aware"):
+        signer.sign_receipt(
+            {"status": "verified"},
+            issued_at=datetime(2026, 1, 1, tzinfo=MissingOffsetTimezone()),
+        )
