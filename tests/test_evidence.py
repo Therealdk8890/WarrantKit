@@ -143,3 +143,34 @@ def test_evidence_rejects_event_without_epoch() -> None:
         assert "epoch is required" in str(exc)
     else:
         raise AssertionError("event without epoch was accepted")
+
+
+@pytest.mark.parametrize("epoch", [True, False, 1.0, "1", -1])
+def test_evidence_rejects_invalid_execution_epoch_types_and_values(epoch):
+    with pytest.raises(ValueError, match="execution epoch must be a non-negative integer"):
+        EvidenceEnvelope.from_execution(
+            execution={
+                "execution_id": "exec-1",
+                "agent_id": "agent-1",
+                "policy_id": "production",
+                "policy_digest": "digest",
+                "epoch": epoch,
+            }
+        )
+
+
+@pytest.mark.parametrize("epoch", [True, False, 1.0, "1", -1])
+def test_evidence_rejects_invalid_event_epoch_types_and_values(epoch):
+    with pytest.raises(ValueError, match="event epoch must be a non-negative integer"):
+        EvidenceEnvelope.from_execution(
+            execution={
+                "execution_id": "exec-1",
+                "agent_id": "agent-1",
+                "policy_id": "production",
+                "policy_digest": "digest",
+                "epoch": 1,
+            },
+            events=(
+                {"execution_id": "exec-1", "sequence": 1, "name": "event", "epoch": epoch},
+            ),
+        )
