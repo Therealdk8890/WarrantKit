@@ -30,7 +30,7 @@ def _decision(policy: Policy) -> ExternalAuthorizationDecision:
 def test_external_authorization_becomes_local_epoch_bound_warrant() -> None:
     policy = _policy()
     warrant = _decision(policy).to_warrant(
-        policy=policy, runtime_id="runtime-1", epoch=7
+        policy=policy, runtime_id="runtime-1", epoch=7, now=NOW
     )
 
     verify_warrant(
@@ -53,7 +53,7 @@ def test_external_authorization_cannot_widen_local_policy(field: str) -> None:
     values[field] = "different"
     mismatched = ExternalAuthorizationDecision(**values)
     with pytest.raises(ValueError, match=field):
-        mismatched.to_warrant(policy=policy, runtime_id="runtime-1", epoch=0)
+        mismatched.to_warrant(policy=policy, runtime_id="runtime-1", epoch=0, now=NOW)
 
 
 def test_external_authorization_cannot_supply_evidence_or_enforcement() -> None:
@@ -103,7 +103,7 @@ def test_external_authorization_constraints_fail_closed_without_policy_contract(
         expires_at=NOW + timedelta(minutes=5),
     )
     with pytest.raises(ValueError, match="constraint semantics"):
-        decision.to_warrant(policy=policy, runtime_id="runtime-1", epoch=1)
+        decision.to_warrant(policy=policy, runtime_id="runtime-1", epoch=1, now=NOW)
 
 
 def test_external_authorization_cannot_grant_capability_outside_policy() -> None:
@@ -120,7 +120,7 @@ def test_external_authorization_cannot_grant_capability_outside_policy() -> None
         expires_at=NOW + timedelta(minutes=5),
     )
     with pytest.raises(ValueError, match="write"):
-        decision.to_warrant(policy=policy, runtime_id="runtime-1", epoch=1)
+        decision.to_warrant(policy=policy, runtime_id="runtime-1", epoch=1, now=NOW)
 
 
 def test_external_authorization_cannot_extend_validity_window() -> None:
@@ -132,6 +132,7 @@ def test_external_authorization_cannot_extend_validity_window() -> None:
             runtime_id="runtime-1",
             epoch=1,
             expires_at=NOW + timedelta(minutes=10),
+            now=NOW,
         )
 
 
@@ -144,4 +145,29 @@ def test_external_authorization_cannot_backdate_warrant_before_issuance() -> Non
             runtime_id="runtime-1",
             epoch=1,
             issued_at=NOW - timedelta(minutes=1),
+            now=NOW,
+        )
+
+
+def test_direct_conversion_rejects_expired_external_authorization() -> None:
+    policy = _policy()
+    decision = _decision(policy)
+    with pytest.raises(ValueError, match="external authorization is expired"):
+        decision.to_warrant(
+            policy=policy,
+            runtime_id="runtime-1",
+            epoch=1,
+            now=NOW + timedelta(minutes=5),
+        )
+
+
+def test_direct_conversion_rejects_not_yet_valid_external_authorization() -> None:
+    policy = _policy()
+    decision = _decision(policy)
+    with pytest.raises(ValueError, match="external authorization is not yet valid"):
+        decision.to_warrant(
+            policy=policy,
+            runtime_id="runtime-1",
+            epoch=1,
+            now=NOW - timedelta(seconds=1),
         )

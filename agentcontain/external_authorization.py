@@ -70,6 +70,7 @@ class ExternalAuthorizationDecision:
         issued_at: datetime | None = None,
         expires_at: datetime | None = None,
         evidence_requirements: EvidenceRequirements | None = None,
+        now: datetime | None = None,
     ) -> Warrant:
         """Convert external authorization into local, epoch-bound Warrant authority.
 
@@ -92,17 +93,30 @@ class ExternalAuthorizationDecision:
                 "external authorization requests capabilities outside accepted policy: "
                 + ", ".join(unexpected)
             )
-        now = issued_at or self.issued_at or datetime.now(timezone.utc)
+        verification_time = now or datetime.now(timezone.utc)
+        if verification_time.tzinfo is None or verification_time.utcoffset() is None:
+            raise ValueError("verification time must be timezone-aware")
+        if self.issued_at is not None and verification_time < self.issued_at:
+            raise ValueError("external authorization is not yet valid")
+        if self.expires_at is not None and verification_time >= self.expires_at:
+            raise ValueError("external authorization is expired")
+
+        warrant_issued_at = issued_at or self.issued_at or verification_time
         expiry = expires_at or self.expires_at
         if expiry is None:
             raise ValueError("an authorization expiry is required")
-        if now.tzinfo is None or expiry.tzinfo is None:
+        if (
+            warrant_issued_at.tzinfo is None
+            or warrant_issued_at.utcoffset() is None
+            or expiry.tzinfo is None
+            or expiry.utcoffset() is None
+        ):
             raise ValueError("warrant validity timestamps must be timezone-aware")
-        if self.issued_at is not None and now < self.issued_at:
+        if self.issued_at is not None and warrant_issued_at < self.issued_at:
             raise ValueError("warrant issued_at cannot precede external authorization")
         if self.expires_at is not None and expiry > self.expires_at:
             raise ValueError("warrant expires_at cannot extend external authorization")
-        if expiry <= now:
+        if expiry <= warrant_issued_at:
             raise ValueError("warrant expires_at must be after issued_at")
         return Warrant.issue(
             warrant_id=f"external:{self.decision_id}",
@@ -112,7 +126,7 @@ class ExternalAuthorizationDecision:
             policy=policy,
             runtime_id=runtime_id,
             epoch=epoch,
-            issued_at=now,
+            issued_at=warrant_issued_at,
             expires_at=expiry,
             capabilities=self.capabilities,
             constraints=self.constraints,
@@ -192,6 +206,7 @@ def import_authorization(
         policy=policy,
         runtime_id=runtime_id,
         epoch=epoch,
+        now=now,
     )
     verification_time = now or datetime.now(timezone.utc)
     if verification_time.tzinfo is None or verification_time.utcoffset() is None:
