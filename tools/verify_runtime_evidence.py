@@ -110,7 +110,7 @@ def verify(document: Mapping[str, Any]) -> None:
 
     revoked_at = parse_time("authority revoked_at", authority.get("revoked_at"))
     occurred_at = parse_time("enforcement occurred_at", enforcement.get("occurred_at"))
-    observed_at = parse_time("observation observed_at", observation.get("observed_at))
+    observed_at = parse_time("observation observed_at", observation.get("observed_at"))
     if occurred_at < revoked_at: fail("runtime binding enforcement predates authority revocation")
     if observed_at < occurred_at: fail("runtime binding observation predates enforcement")
 
