@@ -36,6 +36,12 @@ def parse_time(label: str, value: Any) -> float:
         return parsed.timestamp()
     fail(f"{label} timestamp is required")
 
+def _require_int(value: Any, label: str, *, minimum: int | None = None) -> None:
+    """Reject bools explicitly because bool is a subclass of int in Python."""
+    if type(value) is not int or (minimum is not None and value < minimum):
+        qualifier = f" at least {minimum}" if minimum is not None else ""
+        fail(f"{label} must be an integer{qualifier}")
+
 def verify(document: Mapping[str, Any]) -> None:
     if set(document) != REQUIRED_ENVELOPE_KEYS: fail("evidence envelope has an invalid shape")
     if document["schema_version"] != SCHEMA_VERSION: fail("unsupported evidence schema")
@@ -43,16 +49,17 @@ def verify(document: Mapping[str, Any]) -> None:
     if not isinstance(execution, Mapping): fail("execution must be a mapping")
     required_execution = {"execution_id","agent_id","policy_id","policy_digest","epoch"}
     if not required_execution <= set(execution): fail("execution identity is incomplete")
-    if not isinstance(execution["epoch"], int) or isinstance(execution["epoch"], bool) or execution["epoch"] < 1:
-        fail("execution epoch must be a positive integer")
+    _require_int(execution["epoch"], "execution epoch", minimum=1)
     events = document["events"]
     if not isinstance(events, list) or not events: fail("verified evidence requires events")
     for expected_sequence, event in enumerate(events, 1):
         if not isinstance(event, Mapping): fail("event must be a mapping")
         if event.get("execution_id") != execution["execution_id"]: fail("event execution_id does not match execution")
         if "epoch" not in event: fail("event epoch is required")
-        if event.get("epoch") != execution["epoch"]: fail("event epoch does not match execution")
-        if event.get("sequence") != expected_sequence: fail("event sequence must be contiguous starting at 1")
+        _require_int(event["epoch"], "event epoch", minimum=1)
+        if event["epoch"] != execution["epoch"]: fail("event epoch does not match execution")
+        _require_int(event.get("sequence"), "event sequence", minimum=1)
+        if event["sequence"] != expected_sequence: fail("event sequence must be contiguous starting at 1")
     verification = document["verification"]
     if not isinstance(verification, Mapping): fail("verification must be a mapping")
     if verification.get("status") not in VALID_STATUSES: fail("invalid verification status")
@@ -63,6 +70,7 @@ def verify(document: Mapping[str, Any]) -> None:
     binding = proof["runtime_binding"]
     if set(binding) != REQUIRED_BINDING_KEYS: fail("runtime binding has an invalid shape")
     if binding["schema_version"] != BINDING_SCHEMA: fail("unsupported runtime binding schema")
+    _require_int(binding["epoch"], "runtime binding epoch", minimum=1)
     if binding["runtime_id"] != execution.get("runtime_id"): fail("runtime binding runtime_id does not match execution")
     if binding["agent_id"] != execution["agent_id"]: fail("runtime binding agent_id does not match execution")
     if binding["epoch"] != execution["epoch"]: fail("runtime binding epoch does not match execution")
@@ -73,6 +81,7 @@ def verify(document: Mapping[str, Any]) -> None:
         if not isinstance(item, Mapping): fail(f"runtime binding {label} must be a mapping")
         record = item.get("record")
         if not isinstance(record, Mapping): fail(f"runtime binding {label} record is required")
+        _require_int(record.get("epoch"), f"runtime binding {label} record epoch", minimum=1)
         if item.get("digest") != digest_record(record): fail(f"runtime binding {label} digest does not match record")
         if record.get("runtime_id") != binding["runtime_id"]: fail(f"runtime binding {label} runtime_id does not match")
         if record.get("agent_id") != binding["agent_id"]: fail(f"runtime binding {label} agent_id does not match")
@@ -101,7 +110,7 @@ def verify(document: Mapping[str, Any]) -> None:
 
     revoked_at = parse_time("authority revoked_at", authority.get("revoked_at"))
     occurred_at = parse_time("enforcement occurred_at", enforcement.get("occurred_at"))
-    observed_at = parse_time("observation observed_at", observation.get("observed_at"))
+    observed_at = parse_time("observation observed_at", observation.get("observed_at))
     if occurred_at < revoked_at: fail("runtime binding enforcement predates authority revocation")
     if observed_at < occurred_at: fail("runtime binding observation predates enforcement")
 
