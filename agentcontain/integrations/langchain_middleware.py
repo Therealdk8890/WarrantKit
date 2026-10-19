@@ -62,6 +62,14 @@ class WarrantKitMiddleware:
     def wrap_tool_call(self, request: Any, handler: Any) -> Any:
         """Verify and enforce one LangChain tool call before its handler runs."""
         operation = str(request.tool.name)
+        # Pin the runtime lease before checking the signed Warrant. If
+        # containment and recovery interleave after verification, this exact
+        # lease remains stale and cannot be replaced with a fresh lease.
+        execution_lease = self.gateway.acquire_lease()
+        if execution_lease is None:
+            raise LangChainWarrantError(
+                "runtime is not active; execution lease unavailable"
+            )
         _verify_current_authority(self.admission, self.gateway, self.warrant_verifier, self.expected_snapshot)
 
         warrant = self.admission.warrant
@@ -82,8 +90,9 @@ class WarrantKitMiddleware:
             risk=self.risk,
             metadata={"framework": "langchain", "integration": "middleware"},
         )
-        result = self.gateway.execute(
+        result = self.gateway.execute_with_lease(
             action,
+            execution_lease,
             lambda _action: handler(request),
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
