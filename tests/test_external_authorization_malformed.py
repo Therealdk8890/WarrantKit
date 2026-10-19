@@ -68,7 +68,7 @@ def test_import_rejects_expired_authorization_when_now_is_omitted():
     document["issued_at"] = (expired_at - timedelta(minutes=5)).isoformat()
     document["expires_at"] = expired_at.isoformat()
 
-    with pytest.raises(ValueError, match="outside its validity window"):
+    with pytest.raises(ValueError, match="external authorization is expired"):
         import_authorization(
             document, policy=policy, runtime_id="runtime-1", epoch=0
         )
