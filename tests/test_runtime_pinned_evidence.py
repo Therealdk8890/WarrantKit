@@ -369,3 +369,30 @@ def test_runtime_binding_rejects_naive_record_timestamps(section, field, outer_f
             },
             events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
         ).with_runtime_pinned_evidence(binding)
+
+
+@pytest.mark.parametrize("label", ["authority", "enforcement", "observation"])
+def test_runtime_binding_rejects_boolean_record_epochs(label):
+    import hashlib
+    from agentcontain.evidence import canonical_json
+
+    binding = _binding()
+    record = dict(binding[label]["record"])
+    record["epoch"] = True
+    binding[label]["record"] = record
+    binding[label]["digest"] = "sha256:" + hashlib.sha256(
+        canonical_json(record).encode("utf-8")
+    ).hexdigest()
+
+    with pytest.raises(ValueError, match="record epoch must be a positive integer"):
+        EvidenceEnvelope.from_execution(
+            execution={
+                "execution_id": "e",
+                "agent_id": "agent-1",
+                "policy_id": "p",
+                "policy_digest": "d",
+                "epoch": 1,
+                "runtime_id": "runtime-1",
+            },
+            events=({"execution_id": "e", "sequence": 1, "name": "containment_verified", "epoch": 1},),
+        ).with_runtime_pinned_evidence(binding)
