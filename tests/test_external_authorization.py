@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 import pytest
 
@@ -7,6 +7,15 @@ from agentcontain.warrant import verify_warrant
 
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+class MissingOffsetTimezone(tzinfo):
+    def utcoffset(self, dt):
+        return None
+
+    def dst(self, dt):
+        return None
+
 
 
 def _policy() -> Policy:
@@ -171,3 +180,13 @@ def test_direct_conversion_rejects_not_yet_valid_external_authorization() -> Non
             epoch=1,
             now=NOW - timedelta(seconds=1),
         )
+
+
+@pytest.mark.parametrize("field", ["issued_at", "expires_at"])
+def test_external_authorization_rejects_timezone_without_utc_offset(field: str) -> None:
+    policy = _policy()
+    values = _decision(policy).__dict__.copy()
+    values[field] = datetime(2026, 1, 1, tzinfo=MissingOffsetTimezone())
+
+    with pytest.raises(ValueError, match=f"{field} must be timezone-aware"):
+        ExternalAuthorizationDecision(**values)
