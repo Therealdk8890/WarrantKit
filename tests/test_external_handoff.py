@@ -93,3 +93,27 @@ def test_identity_mismatch_fails_closed() -> None:
 
     assert result.state == CorrelationState.CONFLICT
     assert "execution_id mismatch" in result.reasons
+
+
+@pytest.mark.parametrize("field", ["schema_version", "source", "execution_id", "warrant_id", "runtime_id", "artifact_ref"])
+@pytest.mark.parametrize("bad_value", [None, 7, [], {}])
+def test_handoff_from_dict_rejects_non_string_required_fields(field, bad_value):
+    document = _handoff().to_dict()
+    document[field] = bad_value
+
+    with pytest.raises(ValueError, match=field if field != "schema_version" else "schema"):
+        ExternalEvidenceHandoff.from_dict(document)
+
+
+@pytest.mark.parametrize("anchor_ref", [7, [], {}, ""])
+def test_handoff_rejects_invalid_anchor_reference(anchor_ref):
+    with pytest.raises(ValueError, match="anchor_ref"):
+        _handoff(anchor_ref=anchor_ref)
+
+
+def test_handoff_from_dict_rejects_boolean_epoch():
+    document = _handoff().to_dict()
+    document["epoch"] = True
+
+    with pytest.raises(ValueError, match="epoch"):
+        ExternalEvidenceHandoff.from_dict(document)
