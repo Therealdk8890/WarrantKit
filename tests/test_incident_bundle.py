@@ -412,3 +412,52 @@ def test_native_provenance_binding_tamper_fails_bundle_verification(tmp_path: Pa
     binding_path.write_text(json.dumps(binding) + "\\n", encoding="utf-8")
     with pytest.raises(ValueError, match="bundle file digest mismatch"):
         verify_incident_bundle(bundle)
+
+
+@pytest.mark.parametrize("epoch", [-1, 0, True, 1.0, "1"])
+def test_incident_bundle_rejects_invalid_runtime_epochs(tmp_path: Path, epoch) -> None:
+    records = _valid_records()
+    records["runtime_evidence"]["execution"]["epoch"] = epoch
+    with pytest.raises(ValueError, match="runtime evidence epoch must be a positive integer"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
+
+
+@pytest.mark.parametrize("sequences", [[1, 3], [0, 1], [1, True], [1, 2.0]])
+def test_incident_bundle_rejects_noncontiguous_or_malformed_sequences(tmp_path: Path, sequences) -> None:
+    records = _valid_records()
+    for event, sequence in zip(records["runtime_evidence"]["events"], sequences):
+        event["sequence"] = sequence
+    with pytest.raises(ValueError, match="event sequence"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
+
+
+@pytest.mark.parametrize("epoch", [True, 1.0, "1", 0, -1])
+def test_incident_bundle_rejects_malformed_event_epochs(tmp_path: Path, epoch) -> None:
+    records = _valid_records()
+    records["runtime_evidence"]["events"][0]["epoch"] = epoch
+    with pytest.raises(ValueError, match="event epoch must be a positive integer"):
+        write_incident_bundle(
+            tmp_path / "incident",
+            incident_id=records["incident_id"],
+            authority=records["authority"],
+            containment=records["containment"],
+            runtime_evidence=records["runtime_evidence"],
+            external_proof=records["external_proof"],
+            provenance=records["provenance"],
+        )
