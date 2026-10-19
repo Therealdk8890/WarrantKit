@@ -75,8 +75,8 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
     epoch = execution.get("epoch")
     if not all(isinstance(value, str) and value for value in (execution_id, runtime_id, agent_id)):
         raise ValueError("runtime evidence execution identity is incomplete")
-    if not isinstance(epoch, int) or isinstance(epoch, bool):
-        raise ValueError("runtime evidence epoch must be an integer")
+    if type(epoch) is not int or epoch < 1:
+        raise ValueError("runtime evidence epoch must be a positive integer")
 
     if not isinstance(incident_id, str) or not incident_id:
         raise ValueError("manifest incident_id must be a non-empty string")
@@ -85,8 +85,8 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
 
     before = containment.get("epoch_before")
     after = containment.get("epoch_after")
-    if not isinstance(before, int) or isinstance(before, bool) or not isinstance(after, int) or isinstance(after, bool):
-        raise ValueError("containment epoch transition must use integer epochs")
+    if type(before) is not int or before < 0 or type(after) is not int or after < 1:
+        raise ValueError("containment epoch transition must use non-negative and positive integer epochs")
     if before >= after or after != epoch:
         raise ValueError("containment epoch transition does not match runtime evidence epoch")
     if containment.get("operation") != "external_containment" or containment.get("external_verified") is not True:
@@ -130,10 +130,10 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
         raise ValueError("issued authority must be the active, unrevoked pre-containment Warrant")
 
     sequences = [event.get("sequence") for event in events]
-    if any(not isinstance(value, int) or isinstance(value, bool) for value in sequences):
-        raise ValueError("runtime evidence event sequence values must be integers")
-    if sequences != sorted(sequences) or len(set(sequences)) != len(sequences):
-        raise ValueError("runtime evidence event sequence must be strictly increasing")
+    if any(type(value) is not int or value < 1 for value in sequences):
+        raise ValueError("runtime evidence event sequence values must be positive integers")
+    if sequences != list(range(1, len(sequences) + 1)):
+        raise ValueError("runtime evidence event sequence must be contiguous starting at 1")
     for event_name in ("containment_verified", "stale_authority_rejected"):
         matching = [event for event in events if event.get("name") == event_name]
         if len(matching) != 1:
@@ -143,14 +143,17 @@ def _validate_evidence_contract(records: Mapping[str, Any], *, incident_id: str)
         event = by_name.get(event_name)
         if event is None:
             raise ValueError(f"runtime evidence is missing required event: {event_name}")
-        if event.get("execution_id") != execution_id or event.get("epoch") != epoch:
+        event_epoch = event.get("epoch")
+        if type(event_epoch) is not int or event_epoch < 1:
+            raise ValueError(f"runtime evidence event epoch must be a positive integer: {event_name}")
+        if event.get("execution_id") != execution_id or event_epoch != epoch:
             raise ValueError(f"runtime evidence event identity mismatch: {event_name}")
     stale = by_name["stale_authority_rejected"]
     details = _require_mapping(stale.get("details"), "stale-authority event details")
     warrant_epoch = details.get("warrant_epoch")
     if (
-        not isinstance(warrant_epoch, int)
-        or isinstance(warrant_epoch, bool)
+        type(warrant_epoch) is not int
+        or warrant_epoch < 0
         or warrant_epoch >= epoch
         or details.get("reason") != "runtime_epoch_mismatch"
     ):
