@@ -1,14 +1,10 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 import pytest
 
 from agentcontain import ExecutionIdentity, Policy
 from agentcontain.warrant import EvidenceRequirements, RevocationState, Warrant, verify_warrant
 
-
-
-
-from datetime import tzinfo
 
 
 class _NoOffsetTimezone(tzinfo):
