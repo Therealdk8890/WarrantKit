@@ -83,7 +83,6 @@ def test_authority_must_match_execution_identity(field: str) -> None:
     document["proof"]["runtime_binding"]["authority"]["digest"] = verifier.digest_record(
         document["proof"]["runtime_binding"]["authority"]["record"]
     )
-
     with pytest.raises(ValueError, match=f"authority {field} does not match execution"):
         verifier.verify(document)
 
@@ -91,7 +90,6 @@ def test_authority_must_match_execution_identity(field: str) -> None:
 def test_runtime_identity_must_match_execution() -> None:
     document = make_evidence()
     document["proof"]["runtime_binding"]["runtime_id"] = "runtime-2"
-
     with pytest.raises(ValueError, match="runtime binding runtime_id does not match execution"):
         verifier.verify(document)
 
@@ -99,7 +97,6 @@ def test_runtime_identity_must_match_execution() -> None:
 def test_epoch_must_match_execution() -> None:
     document = make_evidence()
     document["proof"]["runtime_binding"]["epoch"] = 8
-
     with pytest.raises(ValueError, match="runtime binding epoch does not match execution"):
         verifier.verify(document)
 
@@ -107,7 +104,6 @@ def test_epoch_must_match_execution() -> None:
 def test_portable_verifier_rejects_caller_authored_verified_status() -> None:
     document = make_evidence()
     document["verification"]["status"] = "verified"
-
     with pytest.raises(ValueError, match="requires status=observed"):
         verifier.verify(document)
 
@@ -115,8 +111,56 @@ def test_portable_verifier_rejects_caller_authored_verified_status() -> None:
 def test_portable_verifier_rejects_event_without_epoch() -> None:
     document = make_evidence()
     document["events"][0].pop("epoch")
-
     with pytest.raises(ValueError, match="event epoch is required"):
+        verifier.verify(document)
+
+
+def _set_epoch_one(document: dict) -> None:
+    """Prepare a self-consistent epoch-1 fixture for bool/int confusion tests."""
+    execution = document["execution"]
+    execution["epoch"] = 1
+    binding = document["proof"]["runtime_binding"]
+    binding["epoch"] = 1
+    for section in ("authority", "enforcement", "observation"):
+        record = binding[section]["record"]
+        record["epoch"] = 1
+        binding[section]["digest"] = verifier.digest_record(record)
+    document["events"][0]["epoch"] = 1
+
+
+def test_portable_verifier_rejects_boolean_event_epoch() -> None:
+    document = make_evidence()
+    _set_epoch_one(document)
+    document["events"][0]["epoch"] = True
+    with pytest.raises(ValueError, match="event epoch must be an integer"):
+        verifier.verify(document)
+
+
+def test_portable_verifier_rejects_boolean_event_sequence() -> None:
+    document = make_evidence()
+    _set_epoch_one(document)
+    document["events"][0]["sequence"] = True
+    with pytest.raises(ValueError, match="event sequence must be an integer"):
+        verifier.verify(document)
+
+
+def test_portable_verifier_rejects_boolean_binding_epoch() -> None:
+    document = make_evidence()
+    _set_epoch_one(document)
+    document["proof"]["runtime_binding"]["epoch"] = True
+    with pytest.raises(ValueError, match="runtime binding epoch must be an integer"):
+        verifier.verify(document)
+
+
+@pytest.mark.parametrize("section", ["authority", "enforcement", "observation"])
+def test_portable_verifier_rejects_boolean_record_epoch(section: str) -> None:
+    document = make_evidence()
+    _set_epoch_one(document)
+    binding = document["proof"]["runtime_binding"]
+    record = binding[section]["record"]
+    record["epoch"] = True
+    binding[section]["digest"] = verifier.digest_record(record)
+    with pytest.raises(ValueError, match=f"runtime binding {section} record epoch must be an integer"):
         verifier.verify(document)
 
 
@@ -135,6 +179,5 @@ def test_portable_verifier_rejects_naive_runtime_timestamps(section, field):
     record[field] = "2026-01-01T00:00:00"
     binding[section]["record"] = record
     binding[section]["digest"] = verifier.digest_record(record)
-
     with pytest.raises(ValueError, match="must include a UTC offset"):
         verifier.verify(document)
