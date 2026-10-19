@@ -42,7 +42,7 @@ def canonical_bytes(value: Any) -> bytes:
 
 
 def _timestamp(value: datetime) -> str:
-    if value.tzinfo is None:
+    if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("issued_at must be timezone-aware")
     return value.astimezone(timezone.utc).isoformat()
 
