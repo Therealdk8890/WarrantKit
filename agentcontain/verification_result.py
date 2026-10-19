@@ -18,6 +18,16 @@ class VerificationStatus(StrEnum):
     UNAUTHENTICATED = "unauthenticated"
 
 
+_CHECK_FIELDS = (
+    "authority_valid",
+    "runtime_valid",
+    "authenticated",
+    "correlated",
+    "anchored",
+    "verifier_executed",
+)
+
+
 @dataclass(frozen=True)
 class VerificationResult:
     """Machine-readable verification composition result."""
@@ -33,10 +43,22 @@ class VerificationResult:
     status: VerificationStatus = field(init=False)
 
     def __post_init__(self) -> None:
-        conflicts = tuple(str(item) for item in self.conflicts)
-        missing = tuple(str(item) for item in self.missing)
-        object.__setattr__(self, "conflicts", conflicts)
-        object.__setattr__(self, "missing", missing)
+        # Do not allow truthy non-booleans (for example, "false" or 1) to
+        # satisfy a security verification dimension.
+        for name in _CHECK_FIELDS:
+            if type(getattr(self, name)) is not bool:
+                raise TypeError(f"{name} must be a bool")
+
+        for name in ("conflicts", "missing"):
+            values = getattr(self, name)
+            if not isinstance(values, (tuple, list)):
+                raise TypeError(f"{name} must be a tuple or list of strings")
+            if any(not isinstance(item, str) or not item.strip() for item in values):
+                raise ValueError(f"{name} must contain only non-empty strings")
+            object.__setattr__(self, name, tuple(values))
+
+        conflicts = self.conflicts
+        missing = self.missing
 
         if conflicts:
             status = VerificationStatus.CONFLICT
