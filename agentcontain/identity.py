@@ -17,16 +17,20 @@ class ExecutionIdentity:
     epoch: int = 0
     runtime_id: str | None = None
 
+    def __post_init__(self) -> None:
+        for name in ("execution_id", "agent_id", "policy_id", "policy_digest"):
+            value = getattr(self, name)
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if self.runtime_id is not None and (
+            not isinstance(self.runtime_id, str) or not self.runtime_id.strip()
+        ):
+            raise ValueError("runtime_id must be None or a non-empty string")
+        if type(self.epoch) is not int or self.epoch < 0:
+            raise ValueError("epoch must be a non-negative integer")
+
     @classmethod
     def create(cls, agent_id: str, policy_id: str, policy_digest: str, *, epoch: int = 0, runtime_id: str | None = None) -> "ExecutionIdentity":
-        if not agent_id.strip():
-            raise ValueError("agent_id must not be empty")
-        if not policy_id.strip():
-            raise ValueError("policy_id must not be empty")
-        if epoch < 0:
-            raise ValueError("epoch must be >= 0")
-        if runtime_id is not None and not runtime_id.strip():
-            raise ValueError("runtime_id must not be empty when supplied")
         return cls(
             execution_id=str(uuid4()),
             agent_id=agent_id,
