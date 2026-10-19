@@ -117,7 +117,7 @@ The checks protect different boundaries: the Warrant check rejects stale authori
 
 ## What WarrantKit means by authority and evidence
 
-- **Warrant:** a typed authority contract bound to policy identity and digest, execution identity, runtime identity and epoch, validity, capabilities, constraints, and evidence requirements.
+- **Warrant:** a typed authority contract bound to policy identity and digest, execution identity, runtime identity and epoch, validity, capabilities, and evidence requirements. The v1 schema retains a `constraints` field for compatibility, but non-empty constraints are unsupported: issuance rejects them and verification fails closed. Do not rely on constraints to limit action arguments or resources.
 - **Evidence:** what a component observed or produced.
 - **Verification:** whether specified checks succeeded.
 - **Receipt:** a record of evidence and its stated authentication status.
