@@ -87,8 +87,8 @@ def test_old_warrant_is_rejected_when_controller_crashes_after_runtime_fence():
     assert old_warrant.runtime.epoch == 0
     protected_snapshot = _expected_snapshot(admission)
 
-    # The runtime commits epoch 1, but the controller dies before WarrantKit
-    # receives a report and updates its cached ExecutionIdentity (still epoch 0).
+    # The runtime commits epoch 1, then raises before report delivery. WarrantKit
+    # must reconcile from the authoritative runtime snapshot, not the report.
     with pytest.raises(RuntimeError, match="controller death"):
         contain(admission)
 
@@ -104,7 +104,7 @@ def test_old_warrant_is_rejected_when_controller_crashes_after_runtime_fence():
     verifier.warrant = old_warrant
     runtime = RuntimeView(engine, state="contained", can_execute=False)
 
-    with pytest.raises(RuntimeError, match="runtime is not active"):
+    with pytest.raises(RuntimeError, match="admission authority changed"):
         verify_current_authority(
             admission,
             FakeGateway(runtime),
