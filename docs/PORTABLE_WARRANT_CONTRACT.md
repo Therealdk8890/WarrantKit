@@ -44,7 +44,7 @@ Warrant
 │   ├── policy_id
 │   ├── policy_digest
 │   ├── capabilities
-│   └── constraints
+│   └── constraints (reserved; non-empty values unsupported in v1)
 ├── runtime
 │   ├── runtime_id
 │   └── epoch
