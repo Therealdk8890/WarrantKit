@@ -1,3 +1,5 @@
+import pytest
+
 from agentcontain.identity import ExecutionIdentity
 
 
@@ -15,9 +17,6 @@ def test_execution_identity_is_stable_and_opaque():
     assert identity.policy_digest == "digest-1"
     assert identity.epoch == 7
 
-
-
-import pytest
 
 
 @pytest.mark.parametrize("epoch", [True, False, 1.0, "1", -1])
