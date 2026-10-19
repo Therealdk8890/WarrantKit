@@ -42,6 +42,11 @@ The key invariant is:
 
 Authority is therefore scoped to execution identity and epoch. Containment advances the runtime epoch and invalidates stale authority. Recovery requires controller-owned authorization and establishes a fresh epoch.
 
+## Constraint semantics are not implemented
+
+WarrantKit v1 does not define an enforced schema for action-argument or resource constraints. The serialized Warrant model retains a string-to-string `constraints` field, but non-empty constraints are rejected by `Warrant.issue()` and by `verify_warrant()`. This is deliberate fail-closed behavior, not partial constraint enforcement. Integrations must not treat a signed Warrant containing a constraint such as `max_amount=100` as limiting the corresponding action argument. Capability authorization and argument/resource constraint enforcement are separate controls; constraint semantics require a versioned schema and enforcement before every protected side effect.
+
+
 ## Independent evidence
 
 Warden, DProvenanceKit, ClaimProofKit, and AgentContainment have distinct evidence boundaries. They are not a hierarchy of truth or authority.
