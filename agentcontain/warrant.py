@@ -90,12 +90,22 @@ class Warrant:
             raise ValueError(f"unsupported warrant schema: {self.schema_version}")
         if isinstance(self.runtime.epoch, bool) or not isinstance(self.runtime.epoch, int) or self.runtime.epoch < 0:
             raise ValueError("runtime epoch must be a non-negative integer")
-        if self.validity.issued_at.tzinfo is None or self.validity.expires_at.tzinfo is None:
+        if (
+            self.validity.issued_at.tzinfo is None
+            or self.validity.issued_at.utcoffset() is None
+            or self.validity.expires_at.tzinfo is None
+            or self.validity.expires_at.utcoffset() is None
+        ):
             raise ValueError("warrant validity timestamps must be timezone-aware")
         if self.validity.expires_at <= self.validity.issued_at:
             raise ValueError("warrant expires_at must be after issued_at")
         if self.lifecycle.state == RevocationState.REVOKED and self.lifecycle.revoked_at is None:
             raise ValueError("revoked warrant requires revoked_at")
+        if self.lifecycle.revoked_at is not None and (
+            self.lifecycle.revoked_at.tzinfo is None
+            or self.lifecycle.revoked_at.utcoffset() is None
+        ):
+            raise ValueError("warrant revoked_at must be timezone-aware")
         if self.lifecycle.state == RevocationState.ACTIVE and self.lifecycle.revoked_at is not None:
             raise ValueError("active warrant cannot have revoked_at")
 
@@ -355,7 +365,7 @@ def verify_warrant(
     if warrant.runtime.epoch != epoch:
         raise ValueError("warrant epoch does not match current runtime epoch")
     current = now or datetime.now(timezone.utc)
-    if current.tzinfo is None:
+    if current.tzinfo is None or current.utcoffset() is None:
         raise ValueError("verification time must be timezone-aware")
     if current < warrant.validity.issued_at:
         raise ValueError("warrant is not yet valid")
