@@ -57,6 +57,9 @@ def validate_runtime_pinned_binding(
         payload = item.get("record")
         if not isinstance(payload, Mapping):
             raise ValueError(f"runtime binding {label} record is required")
+        record_epoch = payload.get("epoch")
+        if type(record_epoch) is not int or record_epoch < 1:
+            raise ValueError(f"runtime binding {label} record epoch must be a positive integer")
         expected_digest = "sha256:" + hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
         if item["digest"] != expected_digest:
             raise ValueError(f"runtime binding {label} digest does not match record")
