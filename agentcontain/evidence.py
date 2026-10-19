@@ -57,6 +57,9 @@ def validate_runtime_pinned_binding(
         payload = item.get("record")
         if not isinstance(payload, Mapping):
             raise ValueError(f"runtime binding {label} record is required")
+        record_epoch = payload.get("epoch")
+        if type(record_epoch) is not int or record_epoch < 1:
+            raise ValueError(f"runtime binding {label} record epoch must be a positive integer")
         expected_digest = "sha256:" + hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
         if item["digest"] != expected_digest:
             raise ValueError(f"runtime binding {label} digest does not match record")
@@ -322,13 +325,18 @@ class EvidenceEnvelope:
 
         execution_id = self.execution["execution_id"]
         execution_epoch = self.execution["epoch"]
+        if type(execution_epoch) is not int or execution_epoch < 0:
+            raise ValueError("execution epoch must be a non-negative integer")
         sequences: list[int] = []
         for event in self.events:
             if event.get("execution_id") != execution_id:
                 raise ValueError("event execution_id does not match envelope")
             if "epoch" not in event:
                 raise ValueError("event epoch is required")
-            if event.get("epoch") != execution_epoch:
+            event_epoch = event.get("epoch")
+            if type(event_epoch) is not int or event_epoch < 0:
+                raise ValueError("event epoch must be a non-negative integer")
+            if event_epoch != execution_epoch:
                 raise ValueError("event epoch does not match envelope execution")
             sequence = event.get("sequence")
             if not isinstance(sequence, int) or isinstance(sequence, bool) or sequence < 1:
