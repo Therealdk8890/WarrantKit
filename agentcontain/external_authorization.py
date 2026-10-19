@@ -53,9 +53,13 @@ class ExternalAuthorizationDecision:
             raise ValueError(f"unsupported authorization schema: {self.schema_version}")
         if self.decision != "allow":
             raise ValueError("only allow decisions can be imported as Warrant authority")
-        if self.issued_at is not None and self.issued_at.tzinfo is None:
+        if self.issued_at is not None and (
+            self.issued_at.tzinfo is None or self.issued_at.utcoffset() is None
+        ):
             raise ValueError("issued_at must be timezone-aware")
-        if self.expires_at is not None and self.expires_at.tzinfo is None:
+        if self.expires_at is not None and (
+            self.expires_at.tzinfo is None or self.expires_at.utcoffset() is None
+        ):
             raise ValueError("expires_at must be timezone-aware")
         if self.issued_at is not None and self.expires_at is not None:
             if self.expires_at <= self.issued_at:
