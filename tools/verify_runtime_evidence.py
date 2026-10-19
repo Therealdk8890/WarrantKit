@@ -27,8 +27,13 @@ def parse_time(label: str, value: Any) -> float:
         if isinstance(value, float) and not math.isfinite(value): fail(f"{label} timestamp must be finite")
         return float(value)
     if isinstance(value, str):
-        try: return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-        except ValueError as exc: raise ValueError(f"{label} timestamp is not ISO-8601") from exc
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError(f"{label} timestamp is not ISO-8601") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            fail(f"{label} timestamp must include a UTC offset")
+        return parsed.timestamp()
     fail(f"{label} timestamp is required")
 
 def verify(document: Mapping[str, Any]) -> None:
