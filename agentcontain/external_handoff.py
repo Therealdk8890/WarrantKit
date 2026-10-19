@@ -50,11 +50,15 @@ class ExternalEvidenceHandoff:
             ("artifact_ref", self.artifact_ref),
         ):
             if not isinstance(value, str) or not value.strip():
-                raise ValueError(f"{name} must not be empty")
-        if self.schema_version != SCHEMA_VERSION:
+                raise ValueError(f"{name} must be a non-empty string")
+        if not isinstance(self.schema_version, str) or self.schema_version != SCHEMA_VERSION:
             raise ValueError(f"unsupported external evidence handoff schema: {self.schema_version}")
         if self.source not in VALID_SOURCES:
             raise ValueError(f"unsupported evidence source: {self.source}")
+        if self.anchor_ref is not None and (
+            not isinstance(self.anchor_ref, str) or not self.anchor_ref.strip()
+        ):
+            raise ValueError("anchor_ref must be None or a non-empty string")
         if isinstance(self.epoch, bool) or not isinstance(self.epoch, int) or self.epoch < 1:
             raise ValueError("epoch must be a positive integer")
         if not isinstance(self.artifact_digest, str) or not _SHA256_RE.fullmatch(self.artifact_digest):

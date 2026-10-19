@@ -211,3 +211,27 @@ def test_artifact_digest_rejects_wrong_input_types() -> None:
         assert "ExternalEvidenceReference" in str(exc)
     else:
         raise AssertionError("wrong reference type was accepted")
+
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["schema_version", "source", "reference_id", "digest", "relation", "captured_at"],
+)
+@pytest.mark.parametrize("bad_value", [None, 7, [], {}])
+def test_external_evidence_from_dict_rejects_non_string_fields(field, bad_value):
+    document = _reference().to_dict()
+    document[field] = bad_value
+
+    with pytest.raises(ValueError, match=field):
+        ExternalEvidenceReference.from_dict(document)
+
+
+def test_external_evidence_from_dict_does_not_coerce_numeric_reference_id():
+    document = _reference().to_dict()
+    document["reference_id"] = 123
+
+    with pytest.raises(ValueError, match="reference_id"):
+        ExternalEvidenceReference.from_dict(document)

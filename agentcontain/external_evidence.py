@@ -52,6 +52,16 @@ class ExternalEvidenceReference:
     schema_version: str = SCHEMA_VERSION
 
     def __post_init__(self) -> None:
+        for name, value in (
+            ("schema_version", self.schema_version),
+            ("source", self.source),
+            ("reference_id", self.reference_id),
+            ("digest", self.digest),
+            ("relation", self.relation),
+            ("captured_at", self.captured_at),
+        ):
+            if not isinstance(value, str):
+                raise ValueError(f"{name} must be a string")
         if self.schema_version != SCHEMA_VERSION:
             raise ValueError(
                 f"unsupported external evidence schema: {self.schema_version}"
@@ -92,12 +102,12 @@ class ExternalEvidenceReference:
         if set(document) != expected:
             raise ValueError("external evidence reference has an invalid shape")
         return cls(
-            schema_version=str(document["schema_version"]),
-            source=str(document["source"]),
-            reference_id=str(document["reference_id"]),
-            digest=str(document["digest"]),
-            relation=str(document["relation"]),
-            captured_at=str(document["captured_at"]),
+            schema_version=document["schema_version"],
+            source=document["source"],
+            reference_id=document["reference_id"],
+            digest=document["digest"],
+            relation=document["relation"],
+            captured_at=document["captured_at"],
         )
 
 
