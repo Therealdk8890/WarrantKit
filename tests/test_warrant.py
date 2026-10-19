@@ -1,9 +1,21 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 
 import pytest
 
 from agentcontain import ExecutionIdentity, Policy
 from agentcontain.warrant import EvidenceRequirements, RevocationState, Warrant, verify_warrant
+
+
+
+class _NoOffsetTimezone(tzinfo):
+    def utcoffset(self, dt):
+        return None
+
+    def dst(self, dt):
+        return None
+
+    def tzname(self, dt):
+        return "no-offset"
 
 
 def _warrant(epoch: int = 0) -> Warrant:
@@ -175,3 +187,31 @@ def test_from_dict_rejects_malformed_nested_schema(mutate, match) -> None:
     mutate(document)
     with pytest.raises((TypeError, ValueError), match=match):
         Warrant.from_dict(document)
+
+
+def test_warrant_rejects_timezone_object_without_utc_offset() -> None:
+    policy = Policy("production", capabilities=("read",))
+    identity = ExecutionIdentity.create(
+        "agent-1", policy.policy_id, policy.digest, epoch=0, runtime_id="runtime-1"
+    )
+    invalid_time = datetime(2026, 1, 1, tzinfo=_NoOffsetTimezone())
+    with pytest.raises(ValueError, match="timezone-aware"):
+        Warrant.issue(
+            warrant_id="w-invalid-time", issuer="controller",
+            agent_id=identity.agent_id, execution_id=identity.execution_id,
+            policy=policy, runtime_id="runtime-1", epoch=0,
+            issued_at=invalid_time,
+            expires_at=datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc),
+            capabilities=("read",),
+        )
+
+
+def test_warrant_rejects_invalid_revocation_timestamp() -> None:
+    warrant = _warrant()
+    with pytest.raises(ValueError, match="revoked_at must be timezone-aware"):
+        warrant.revoke(revoked_at=datetime(2026, 1, 1, tzinfo=_NoOffsetTimezone()))
+
+
+def test_verifier_rejects_timezone_object_without_utc_offset() -> None:
+    with pytest.raises(ValueError, match="verification time must be timezone-aware"):
+        _verify(_warrant(), now=datetime(2026, 1, 1, tzinfo=_NoOffsetTimezone()))
