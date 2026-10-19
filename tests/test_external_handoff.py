@@ -49,6 +49,7 @@ def test_matching_anchor_is_correlated_but_not_verified() -> None:
         warrant_id="warrant-1",
         runtime_id="runtime-1",
         epoch=3,
+        trusted_anchor_digest="sha256:" + "a" * 64,
     )
 
     assert result.state == CorrelationState.CORRELATED
@@ -63,10 +64,36 @@ def test_valid_but_wrong_replacement_is_conflict() -> None:
         warrant_id="warrant-1",
         runtime_id="runtime-1",
         epoch=3,
+        trusted_anchor_digest="sha256:" + "a" * 64,
     )
 
     assert result.state == CorrelationState.CONFLICT
-    assert "anchored digest" in result.reasons[0]
+    assert "trusted anchor digest" in result.reasons[0]
+
+
+def test_self_asserted_anchor_metadata_cannot_establish_correlation() -> None:
+    result = correlate_handoff(
+        _handoff(),
+        execution_id="exec-1",
+        warrant_id="warrant-1",
+        runtime_id="runtime-1",
+        epoch=3,
+    )
+    assert result.state == CorrelationState.UNANCHORED
+    assert result.anchored is False
+
+
+def test_handoff_anchor_digest_must_match_independent_anchor() -> None:
+    result = correlate_handoff(
+        _handoff(anchor_digest="sha256:" + "b" * 64),
+        execution_id="exec-1",
+        warrant_id="warrant-1",
+        runtime_id="runtime-1",
+        epoch=3,
+        trusted_anchor_digest="sha256:" + "a" * 64,
+    )
+    assert result.state == CorrelationState.CONFLICT
+    assert "handoff anchor digest" in result.reasons[0]
 
 
 def test_missing_anchor_is_not_verified() -> None:
@@ -109,6 +136,31 @@ def test_handoff_from_dict_rejects_non_string_required_fields(field, bad_value):
 def test_handoff_rejects_invalid_anchor_reference(anchor_ref):
     with pytest.raises(ValueError, match="anchor_ref"):
         _handoff(anchor_ref=anchor_ref)
+
+
+def test_correlate_handoff_rejects_boolean_expected_epoch() -> None:
+    with pytest.raises(ValueError, match="expected epoch"):
+        correlate_handoff(
+            _handoff(),
+            execution_id="exec-1",
+            warrant_id="warrant-1",
+            runtime_id="runtime-1",
+            epoch=True,
+            trusted_anchor_digest="sha256:" + "a" * 64,
+        )
+
+
+@pytest.mark.parametrize("digest", ["", "sha256:abc", "SHA256:" + "a" * 64, 7])
+def test_trusted_anchor_digest_is_strictly_validated(digest) -> None:
+    with pytest.raises(ValueError, match="trusted_anchor_digest"):
+        correlate_handoff(
+            _handoff(),
+            execution_id="exec-1",
+            warrant_id="warrant-1",
+            runtime_id="runtime-1",
+            epoch=3,
+            trusted_anchor_digest=digest,
+        )
 
 
 def test_handoff_from_dict_rejects_boolean_epoch():
