@@ -98,7 +98,7 @@ def test_old_warrant_and_lease_stay_invalid_across_controller_restart(tmp_path):
     assert snapshot.epoch == 2
     assert snapshot.can_execute is True
     assert admission.warrant is not None
-    assert admission.warrant.epoch == 2
+    assert admission.warrant.runtime.epoch == 2
     assert admission.warrant_attestation is not None
 
     # Recovery grants only fresh epoch-scoped authority; the old Warrant
