@@ -27,7 +27,8 @@ class ExternalEvidenceHandoff:
 
     This record carries correlation and anchor metadata only. It does not
     authenticate the producer and does not promote external evidence into
-    authority or verification.
+    authority or verification. In particular, anchor_digest is a claim carried
+    by the handoff, not itself an independently trusted anchor.
     """
 
     execution_id: str
@@ -115,6 +116,7 @@ class HandoffCorrelation:
 
     @property
     def anchored(self) -> bool:
+        """True only when an independently supplied trusted anchor matched."""
         return self.state == CorrelationState.CORRELATED
 
 
@@ -125,15 +127,26 @@ def correlate_handoff(
     warrant_id: str,
     runtime_id: str,
     epoch: int,
+    trusted_anchor_digest: str | None = None,
 ) -> HandoffCorrelation:
-    """Correlate a handoff to expected execution identity and optional anchor.
+    """Correlate identity and compare with an independently trusted digest.
 
-    A valid handoff is not considered verified. If an anchor is supplied,
-    the artifact must match that anchored digest or the result is conflict.
+    The handoff's anchor_digest is transport metadata and cannot authenticate
+    itself. The caller must resolve/authenticate the anchor independently and
+    supply its digest as trusted_anchor_digest. This establishes digest
+    correlation only, not producer authenticity or truth of claims.
     """
 
     if not isinstance(handoff, ExternalEvidenceHandoff):
         raise TypeError("handoff must be an ExternalEvidenceHandoff")
+
+    if isinstance(epoch, bool) or not isinstance(epoch, int) or epoch < 1:
+        raise ValueError("expected epoch must be a positive integer")
+    if trusted_anchor_digest is not None and (
+        not isinstance(trusted_anchor_digest, str)
+        or not _SHA256_RE.fullmatch(trusted_anchor_digest)
+    ):
+        raise ValueError("trusted_anchor_digest must be a lowercase sha256:<64 hex> digest")
 
     mismatches = []
     for field, expected in (
@@ -148,16 +161,22 @@ def correlate_handoff(
     if mismatches:
         return HandoffCorrelation(CorrelationState.CONFLICT, tuple(mismatches))
 
-    if handoff.anchor_digest is None:
+    if trusted_anchor_digest is None:
         return HandoffCorrelation(
             CorrelationState.UNANCHORED,
-            ("no external anchor supplied",),
+            ("no independently trusted anchor digest supplied",),
         )
 
-    if handoff.artifact_digest != handoff.anchor_digest:
+    if handoff.anchor_digest != trusted_anchor_digest:
         return HandoffCorrelation(
             CorrelationState.CONFLICT,
-            ("artifact digest differs from anchored digest",),
+            ("handoff anchor digest differs from trusted anchor digest",),
+        )
+
+    if handoff.artifact_digest != trusted_anchor_digest:
+        return HandoffCorrelation(
+            CorrelationState.CONFLICT,
+            ("artifact digest differs from trusted anchor digest",),
         )
 
     return HandoffCorrelation(CorrelationState.CORRELATED)
