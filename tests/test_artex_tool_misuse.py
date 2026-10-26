@@ -7,6 +7,8 @@ or weaken their assertions merely to obtain a green run.
 """
 from __future__ import annotations
 
+import pytest
+
 from agent_containment import Action, ActionGateway, PolicyEngine
 from agent_containment.containment import ContainmentController
 from agent_containment.control import ContainmentService
@@ -63,22 +65,17 @@ def test_spray_denials_do_not_halt_runtime_or_block_later_allowed_reads():
         result = gateway.execute(action, lambda candidate: side_effects.append(candidate.action_id))
         decisions.append(getattr(result, "decision", None))
 
-    denied_ids = {
-        f"spray-{index}" for index in range(1_000) if index % 2 == 1
-    }
+    denied_ids = {f"spray-{index}" for index in range(1_000) if index % 2 == 1}
     assert not denied_ids.intersection(side_effects)
     assert runtime.state is RuntimeState.ACTIVE
-    assert all(
-        decisions[index] is DecisionType.ALLOW
-        for index in range(0, 1_000, 2)
-    )
+    assert all(decisions[index] is DecisionType.ALLOW for index in range(0, 1_000, 2))
 
 
 def test_tenant_b_resource_is_denied_under_tenant_a_only_policy():
     """Expected to expose the absence of tenant-aware scope enforcement.
 
     ActionGateway's current Action/PolicyEngine contract has no tenant-scope
-    primitive. This test must remain a failing security finding until scope is
+    primitive. This must remain a failing security finding until scope is
     enforced by trusted policy, not inferred from a resource-name convention.
     """
     _runtime, _controller, _service, gateway = _harness()
@@ -104,10 +101,7 @@ def test_containment_invalidates_old_and_forged_epoch_leases_without_side_effect
     assert runtime.state is RuntimeState.CONTAINED
     assert runtime.can_execute is False
 
-    forged_new_epoch_lease = ExecutionLease(
-        agent_id="artex-agent",
-        epoch=runtime.epoch,
-    )
+    forged_new_epoch_lease = ExecutionLease(agent_id="artex-agent", epoch=runtime.epoch)
     side_effects: list[str] = []
 
     for action_id, lease in (
@@ -124,34 +118,24 @@ def test_containment_invalidates_old_and_forged_epoch_leases_without_side_effect
     assert side_effects == []
 
 
-def test_recovery_requires_current_capability_and_exact_next_epoch():
+def test_recovery_requires_capability_and_rejects_stale_expected_epoch():
     runtime, _controller, service, _gateway = _harness()
     service.contain("artex-agent")
     assert runtime.epoch == 1
     assert runtime.state is RuntimeState.CONTAINED
 
-    # No caller-created object is a valid recovery capability.
-    try:
+    authorization = service.issue_recovery_authorization("artex-agent")
+
+    with pytest.raises(PermissionError):
         runtime.recover(object(), expected_epoch=runtime.epoch)
-    except PermissionError:
-        pass
-    else:
-        raise AssertionError("recovery succeeded without controller authorization")
+
+    # Even a controller-issued capability cannot recover against an old epoch.
+    with pytest.raises(RuntimeError, match="epoch mismatch"):
+        runtime.recover(authorization._capability, expected_epoch=0)
     assert runtime.epoch == 1
+    assert runtime.state is RuntimeState.CONTAINED
 
-    stale_authorization = service.issue_recovery_authorization("artex-agent")
-    try:
-        service.recover("artex-agent", stale_authorization)
-    except Exception:
-        # The service may consume/rotate an authorization; the authoritative
-        # recovery assertion below uses a freshly issued authorization.
-        pass
-    if runtime.state is RuntimeState.CONTAINED:
-        authorization = service.issue_recovery_authorization("artex-agent")
-        recovered_epoch = service.recover("artex-agent", authorization)
-    else:
-        recovered_epoch = runtime.epoch
-
+    recovered_epoch = service.recover("artex-agent", authorization)
     assert recovered_epoch == 2
     assert runtime.epoch == 2
     assert runtime.state is RuntimeState.ACTIVE
