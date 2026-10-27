@@ -309,6 +309,7 @@ def main() -> int:
             "runtime_state": "TERMINATED",
             "cgroup_populated": cgroup_populated_after,
             "workload_exit_code": workload_exit_code,
+            "workload_uid": workload_uid,
             "observation_source": "linux_cgroup_supervisor_and_child_wait",
         })
 
