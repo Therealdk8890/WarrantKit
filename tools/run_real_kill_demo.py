@@ -9,11 +9,15 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import sys
 import time
 from pathlib import Path
 
+from agent_containment.gateway import ActionGateway
+from agent_containment.models import Action
+from agent_containment.policy import PolicyEngine
 from agentcontain.engine import admit, build_agentcontainment_engine, contain
 from agentcontain.evidence import EvidenceEnvelope, canonical_json
 from agentcontain.policy import Policy
@@ -35,6 +39,62 @@ def _sha256_file(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _workload_identity():
+    """Return a dedicated unprivileged identity for the contained workload."""
+    import pwd
+
+    try:
+        account = pwd.getpwnam("nobody")
+    except KeyError as exc:
+        raise RuntimeError("real-kill proof requires an unprivileged nobody account") from exc
+    if account.pw_uid == 0 or account.pw_uid == os.geteuid():
+        raise RuntimeError("workload identity must be distinct from the privileged controller")
+    return account
+
+
+def _assert_unprivileged_key_access_denied(path: Path, workload) -> None:
+    """Probe file access as the workload identity without reading key bytes."""
+    if not path.is_file():
+        raise RuntimeError(f"incident signing key file is missing: {path}")
+    mode = stat.S_IMODE(path.stat().st_mode)
+    if mode & 0o077 or path.stat().st_uid == workload.pw_uid:
+        raise RuntimeError("incident signing key must be owner-only and unavailable to the workload identity")
+    probe = (
+        "import os,sys; "
+        "fd=None; "
+        "\ntry: fd=os.open(sys.argv[1], os.O_RDONLY)"
+        "\nexcept PermissionError: raise SystemExit(0)"
+        "\nexcept OSError: raise SystemExit(2)"
+        "\nelse: os.close(fd); raise SystemExit(1)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", probe, str(path)],
+        env={"PATH": os.defpath, "HOME": "/nonexistent", "LANG": "C"},
+        user=workload.pw_uid,
+        group=workload.pw_gid,
+        extra_groups=[],
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=5,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("incident signing key is readable by the workload identity")
+
+
+def _process_credentials(pid: int) -> tuple[int, int]:
+    status_path = Path(f"/proc/{pid}/status")
+    try:
+        fields = {}
+        for line in status_path.read_text(encoding="utf-8").splitlines():
+            name, separator, value = line.partition(":")
+            if separator and name in {"Uid", "Gid"}:
+                fields[name] = int(value.split()[0])
+        return fields["Uid"], fields["Gid"]
+    except (OSError, KeyError, ValueError, IndexError) as exc:
+        raise RuntimeError(f"cannot verify unprivileged workload credentials for pid {pid}") from exc
+
+
 def main() -> int:
     if os.name != "posix" or os.geteuid() != 0:
         print("REJECTED: real-kill proof requires Linux/root privileges", file=sys.stderr)
@@ -48,19 +108,43 @@ def main() -> int:
 
     from agent_containment.linux_supervisor import LinuxCgroupSupervisor
 
+    workload = _workload_identity()
+    for key_file_env in (
+        "WARRANTKIT_INCIDENT_SIGNING_KEY_FILE",
+        "WARRANTKIT_DPK_SIGNING_KEY_FILE",
+    ):
+        key_file = os.environ.get(key_file_env)
+        if key_file:
+            _assert_unprivileged_key_access_denied(Path(key_file), workload)
+
     supervisor = LinuxCgroupSupervisor("auto")
     agent_id = f"warrantkit-real-kill-{os.getpid()}"
     cgroup = supervisor.create_agent(agent_id)
     child = None
+    proof_events: list[dict] = []
 
     try:
-        print("[1/7] launching real workload")
-        child = subprocess.Popen(["python3", "-c", "import time; time.sleep(300)"])
+        print("[1/11] launching real workload")
+        # The workload runs under a separate unprivileged UID/GID and receives
+        # only a minimal environment. In particular, it cannot inherit the
+        # controller's DPK signer key or incident-signing key path.
+        child = subprocess.Popen(
+            [sys.executable, "-c", "import time; time.sleep(300)"],
+            env={"PATH": os.defpath, "HOME": "/nonexistent", "LANG": "C"},
+            user=workload.pw_uid,
+            group=workload.pw_gid,
+            extra_groups=[],
+        )
+        workload_uid, workload_gid = _process_credentials(child.pid)
+        if workload_uid != workload.pw_uid or workload_gid != workload.pw_gid or workload_uid == 0:
+            raise RuntimeError("workload did not start with the required unprivileged credentials")
         supervisor.attach_pid(cgroup, child.pid)
-        assert supervisor.pid_in_cgroup(child.pid, cgroup)
-        assert supervisor.is_populated(cgroup)
+        if not supervisor.pid_in_cgroup(child.pid, cgroup):
+            raise RuntimeError("workload was not attached to its cgroup")
+        if not supervisor.is_populated(cgroup):
+            raise RuntimeError("workload cgroup was not populated before containment")
 
-        print("[2/7] admitting workload under Warrant")
+        print("[2/11] admitting workload under Warrant")
         engine = build_agentcontainment_engine(agent_id, cgroup_path=str(cgroup))
         runtime_id = engine.runtime_id
         admission = admit(
@@ -70,18 +154,82 @@ def main() -> int:
             runtime_id=runtime_id,
         )
 
-        print(f"    warrant={admission.warrant.warrant_id}")
-        print(f"    epoch={admission.identity.epoch}")
         if admission.warrant is None:
             raise RuntimeError("real-kill proof requires a Warrant-bound admission")
+        print(f"    warrant={admission.warrant.warrant_id}")
+        print(f"    epoch={admission.identity.epoch}")
         pre_containment_warrant = admission.warrant.to_dict()
 
-        print("[3/8] invoking external runtime enforcement")
-        report = contain(admission)
-        assert report.complete
-        assert report.external_verified
+        print("[3/11] validating the Warrant and separately exercising the gateway")
+        action = Action(
+            agent_id=admission.identity.agent_id,
+            action_id=f"{admission.identity.execution_id}:authorized-proof-action",
+            operation="test-workload",
+            resource="local-real-kill-proof",
+            risk=1,
+        )
+        verify_warrant(
+            admission.warrant,
+            execution_id=admission.identity.execution_id,
+            agent_id=admission.identity.agent_id,
+            policy_id=admission.identity.policy_id,
+            policy_digest=admission.identity.policy_digest,
+            runtime_id=runtime_id,
+            epoch=admission.identity.epoch,
+        )
+        proof_events.append({
+            "name": "warrant_validated",
+            "observed_at_unix_microseconds": time.time_ns() // 1_000,
+            "execution_id": admission.identity.execution_id,
+            "runtime_id": runtime_id,
+            "warrant_id": admission.warrant.warrant_id,
+            "epoch": admission.identity.epoch,
+        })
+        action_calls: list[str] = []
+        gateway = ActionGateway(PolicyEngine(), admission.engine.controller)
+        authorized_result = gateway.execute(
+            action,
+            lambda authorized_action: action_calls.append(
+                authorized_action.action_id
+            ) or {"status": "executed", "resource": action.resource},
+        )
+        if authorized_result != {"status": "executed", "resource": action.resource} or len(action_calls) != 1:
+            raise AssertionError("valid Warrant did not permit exactly one intended gateway action")
+        proof_events.append({
+            "name": "gateway_action_executed",
+            "observed_at_unix_microseconds": time.time_ns() // 1_000,
+            "execution_id": admission.identity.execution_id,
+            "agent_id": admission.identity.agent_id,
+            "runtime_id": runtime_id,
+            "epoch": admission.identity.epoch,
+            "action_id": action.action_id,
+            "operation": action.operation,
+            "resource": action.resource,
+            "gateway_result": authorized_result,
+            "executor_action_ids": action_calls,
+        })
+        print(f"    authorized action executed: {authorized_result}")
 
-        print("[4/8] proving pre-containment authority is stale")
+        print("[4/11] invoking external runtime enforcement")
+        report = contain(admission)
+        if report.complete is not True:
+            raise RuntimeError("containment report is incomplete")
+        if report.external_verified is not True:
+            raise RuntimeError("external cgroup containment was not verified")
+        proof_events.append({
+            "name": "containment_completed",
+            "observed_at_unix_microseconds": time.time_ns() // 1_000,
+            "execution_id": admission.identity.execution_id,
+            "runtime_id": runtime_id,
+            "epoch_before": pre_containment_warrant["runtime"]["epoch"],
+            "epoch_after": admission.identity.epoch,
+            "complete": report.complete,
+            "external_verified": report.external_verified,
+            "evidence_ref": getattr(report, "evidence_ref", None),
+            "verification_id": getattr(report, "verification_id", None),
+        })
+
+        print("[5/11] proving pre-containment authority is stale")
         replayed_warrant = Warrant.from_dict(pre_containment_warrant)
         try:
             verify_warrant(replayed_warrant, execution_id=admission.identity.execution_id, agent_id=admission.identity.agent_id, policy_id=admission.identity.policy_id, policy_digest=admission.identity.policy_digest, runtime_id=runtime_id, epoch=admission.identity.epoch)
@@ -89,6 +237,15 @@ def main() -> int:
             if "epoch" not in str(exc):
                 raise
             print(f"    stale pre-containment Warrant rejected: {exc}")
+            proof_events.append({
+                "name": "stale_authority_rejected",
+                "observed_at_unix_microseconds": time.time_ns() // 1_000,
+                "execution_id": admission.identity.execution_id,
+                "runtime_id": runtime_id,
+                "warrant_epoch": replayed_warrant.runtime.epoch,
+                "current_epoch": admission.identity.epoch,
+                "reason": str(exc),
+            })
         else:
             raise AssertionError("pre-containment Warrant remained valid after epoch transition")
 
@@ -101,7 +258,32 @@ def main() -> int:
         else:
             raise AssertionError("revoked Warrant remained executable")
 
-        print("[5/8] independently checking terminal runtime state")
+        print("[6/11] proving the gateway rejects the stale action")
+        post_containment_calls: list[dict] = []
+        stale_action_result = gateway.execute(
+            action,
+            lambda attempted_action: post_containment_calls.append(
+                {"action_id": attempted_action.action_id}
+            ) or "executor-ran",
+        )
+        if post_containment_calls:
+            raise AssertionError("gateway reached the action after containment")
+        decision = getattr(getattr(stale_action_result, "decision", None), "value", None)
+        reason = getattr(stale_action_result, "reason", None)
+        if decision != "deny":
+            raise AssertionError(f"gateway did not deny post-containment action: {stale_action_result!r}")
+        proof_events.append({
+            "name": "stale_action_rejected",
+            "observed_at_unix_microseconds": time.time_ns() // 1_000,
+            "execution_id": admission.identity.execution_id,
+            "runtime_id": runtime_id,
+            "current_epoch": admission.identity.epoch,
+            "reason": reason,
+            "executor_called": False,
+        })
+        print(f"    gateway rejected action before executor: {reason}")
+
+        print("[7/11] independently checking terminal runtime state")
         child.wait(timeout=5)
         # Capture terminal-state facts from the OS-facing supervisor and child
         # process, rather than hard-coding the evidence fields below.
@@ -117,8 +299,21 @@ def main() -> int:
         terminal_observed_at = time.time()
         print(f"    cgroup_populated={cgroup_populated_after}")
         print(f"    workload exited with code {workload_exit_code}")
+        proof_events.append({
+            "name": "runtime_terminal_state_observed",
+            "observed_at_unix_microseconds": time.time_ns() // 1_000,
+            "execution_id": admission.identity.execution_id,
+            "runtime_id": runtime_id,
+            "agent_id": admission.identity.agent_id,
+            "epoch": admission.identity.epoch,
+            "runtime_state": "TERMINATED",
+            "cgroup_populated": cgroup_populated_after,
+            "workload_exit_code": workload_exit_code,
+            "workload_uid": workload_uid,
+            "observation_source": "linux_cgroup_supervisor_and_child_wait",
+        })
 
-        print("[6/8] exporting runtime-pinned evidence")
+        print("[8/11] exporting runtime-pinned evidence")
         authority_export = getattr(admission.engine, "authority_revocation_evidence_record", None)
         if authority_export is None:
             raise RuntimeError("runtime engine does not expose authority revocation evidence")
@@ -204,7 +399,34 @@ def main() -> int:
         )
         print(f"    artifact={artifact}")
 
-        print("[7/8] independently verifying exported artifact")
+        trace_artifact = Path(
+            os.environ.get("WARRANTKIT_EXECUTION_TRACE_ARTIFACT", "real-kill-execution-trace.json")
+        )
+        trace_artifact.parent.mkdir(parents=True, exist_ok=True)
+        trace_artifact.write_text(
+            json.dumps(
+                {
+                    "schema_version": "warrantkit.real-kill-execution-trace/v1",
+                    "execution_id": admission.identity.execution_id,
+                    "agent_id": admission.identity.agent_id,
+                    "runtime_id": runtime_id,
+                    "policy_id": admission.identity.policy_id,
+                    "policy_digest": admission.identity.policy_digest,
+                    "epoch_before": replayed_warrant.runtime.epoch,
+                    "epoch_after": admission.identity.epoch,
+                    "workload_pid": child.pid,
+                    "workload_uid": workload_uid,
+                    "cgroup_path": str(cgroup),
+                    "events": proof_events,
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        print(f"    execution_trace={trace_artifact}")
+
+        print("[9/11] independently verifying exported artifact")
         verifier = Path(__file__).with_name("verify_runtime_evidence.py")
         result = subprocess.run(
             [sys.executable, str(verifier), str(artifact)],
@@ -219,7 +441,7 @@ def main() -> int:
 
         bundle_dir = os.environ.get("WARRANTKIT_INCIDENT_BUNDLE_DIR")
         if bundle_dir:
-            print("[8/9] building signed incident bundle")
+            print("[10/11] building signed incident bundle")
             incident_id = f"INC-{admission.identity.execution_id}"
             manifest = write_incident_bundle(
                 Path(bundle_dir),
@@ -270,10 +492,10 @@ def main() -> int:
             print(f"    incident={manifest['incident_id']}")
             print("    signature=Ed25519 verification receipt")
         else:
-            print("[8/9] incident bundle not requested")
+            print("[10/11] incident bundle not requested")
             print("    set WARRANTKIT_INCIDENT_BUNDLE_DIR to export one")
 
-        print("[9/9] proof complete")
+        print("[11/11] proof complete")
         print("What this proves: the tested Linux environment enforced the configured")
         print("cgroup-v2 kill/fence boundary, invalidated pre-containment authority,")
         print("and produced independently checked evidence.")

@@ -57,6 +57,9 @@ jobs:
       - name: Install WarrantKit
         run: python -m pip install -e '.[test]'
 
+      - name: Install DProvenanceKit proof test dependency
+        run: python -m pip install 'dprovenancekit[crypto]==0.7.1'
+
       - name: Verify package metadata
         run: |
           python -c 'import importlib.metadata as m, pathlib, tomllib; expected=tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]; assert m.version("warrantkit") == expected'
@@ -173,6 +176,9 @@ jobs:
       - name: Install WarrantKit
         run: python -m pip install -e '.[test]'
 
+      - name: Install DProvenanceKit attestation verifier
+        run: python -m pip install 'dprovenancekit[crypto]==0.7.1'
+
       - name: Inspect cgroup environment
         run: |
           uname -a
@@ -198,13 +204,19 @@ jobs:
           from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
           key = Ed25519PrivateKey.generate()
-          Path("/tmp/warrantkit-ci-signing-key.pem").write_bytes(
-              key.private_bytes(
-                  serialization.Encoding.PEM,
-                  serialization.PrivateFormat.PKCS8,
-                  serialization.NoEncryption(),
-              )
+          secret_dir = Path(os.environ["RUNNER_TEMP"]) / "warrantkit-proof-secrets"
+          secret_dir.mkdir(mode=0o700)
+          os.chmod(secret_dir, 0o700)
+          key_path = secret_dir / "incident-signing-key.pem"
+          key_bytes = key.private_bytes(
+              serialization.Encoding.PEM,
+              serialization.PrivateFormat.PKCS8,
+              serialization.NoEncryption(),
           )
+          descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(descriptor, "wb") as key_file:
+              key_file.write(key_bytes)
+          os.chmod(key_path, 0o600)
           public_key_b64 = base64.b64encode(
               key.public_key().public_bytes(
                   serialization.Encoding.Raw,
@@ -213,40 +225,79 @@ jobs:
           ).decode("ascii")
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               env.write(f"WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64={public_key_b64}\n")
+              env.write(f"WARRANTKIT_INCIDENT_SIGNING_KEY_FILE={key_path}\n")
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
               summary.write("## Per-run incident-bundle trust anchor\n\n")
               summary.write("This Ed25519 public key was generated for this CI run and is supplied separately to the incident-bundle verifier. Use it only to verify the artifact from this exact run. It is ephemeral and does not identify a production operator or provide host attestation.\n\n")
               summary.write("Trusted public key (base64 raw Ed25519): `" + public_key_b64 + "`\n")
           PY
 
+      - name: Provision isolated CI DPK signing key and trust pin
+        run: |
+          python - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+          from dprovenancekit.attestation import (
+              SoftwareTraceAttestationKey,
+              key_id_for_public_key_x963,
+          )
+
+          key = SoftwareTraceAttestationKey()
+          private_key_b64 = base64.b64encode(key.raw_representation).decode("ascii")
+          public_key_b64 = base64.b64encode(key.public_key_x963_representation).decode("ascii")
+          key_id = key_id_for_public_key_x963(key.public_key_x963_representation)
+          secret_dir = Path(os.environ["RUNNER_TEMP"]) / "warrantkit-proof-secrets"
+          private_key_path = secret_dir / "dpk-signing-key.b64"
+          descriptor = os.open(private_key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(descriptor, "w", encoding="ascii") as private_key_file:
+              private_key_file.write(private_key_b64)
+          os.chmod(private_key_path, 0o600)
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write(f"WARRANTKIT_DPK_SIGNING_KEY_FILE={private_key_path}\n")
+              env.write(f"WARRANTKIT_DPK_TRUSTED_KEY_ID={key_id}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Per-run DProvenanceKit trust anchor\n\n")
+              summary.write("This P-256 public key is provisioned to the verifier separately from the uploaded proof artifact. It is ephemeral and authenticates only this CI run's signing key.\n\n")
+              summary.write("Trusted DPK key ID: `" + key_id + "`\n\n")
+              summary.write("Trusted public key (base64 X9.63 P-256): `" + public_key_b64 + "`\n")
+          PY
+
       - name: Run operator-facing real-kill evidence proof
         env:
           AGENT_CONTAIN_RUN_REAL_CGROUP: "1"
-          WARRANTKIT_REAL_KILL_ARTIFACT: ./incident-bundle/runtime-evidence.json
-          WARRANTKIT_INCIDENT_BUNDLE_DIR: ./incident-bundle
-          WARRANTKIT_INCIDENT_SIGNING_KEY_FILE: /tmp/warrantkit-ci-signing-key.pem
           WARRANTKIT_INCIDENT_SIGNING_KEY_ID: warrantkit-ci-test-key
         run: |
-          sudo -E "$pythonLocation/bin/python" tools/run_real_kill_demo.py
+          sudo -E "$pythonLocation/bin/python" tools/run_real_kill_dpk_proof.py --output-dir ./real-kill-dpk-proof
 
       - name: Re-verify exported real-kill artifact
         run: |
-          python tools/verify_runtime_evidence.py ./incident-bundle/runtime-evidence.json
+          python tools/verify_runtime_evidence.py ./real-kill-dpk-proof/runtime-evidence.json
+          dpk attest verify --in ./real-kill-dpk-proof/dpk-attestation.json --trusted-key "$WARRANTKIT_DPK_TRUSTED_KEY_ID"
 
       - name: Verify incident bundle against separately supplied CI trust anchor
         run: |
-          result="$(python tools/verify_incident_bundle.py ./incident-bundle --trusted-public-key "$WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64")"
+          result="$(python tools/verify_incident_bundle.py ./real-kill-dpk-proof/incident-bundle --trusted-public-key "$WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64")"
           printf '%s\n' "$result"
           case "$result" in
             AUTHENTICATED:*) ;;
             *) echo "Expected AUTHENTICATED result from trusted-key verification" >&2; exit 1 ;;
           esac
 
+      - name: Verify signed cross-artifact bindings
+        run: |
+          python tools/verify_real_kill_dpk_proof.py \
+            --attestation ./real-kill-dpk-proof/dpk-attestation.json \
+            --runtime-evidence ./real-kill-dpk-proof/runtime-evidence.json \
+            --incident-bundle ./real-kill-dpk-proof/incident-bundle \
+            --trusted-key-id "$WARRANTKIT_DPK_TRUSTED_KEY_ID" \
+            --trusted-public-key "$WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64"
+
       - name: Upload real-kill incident bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: real-kill-incident-bundle
-          path: incident-bundle/
+          name: real-kill-dpk-proof
+          path: real-kill-dpk-proof/
           if-no-files-found: error
 
   gateway-benchmark-smoke:
