@@ -383,7 +383,7 @@ jobs:
       - name: Verify pinned AgentContainment revision
         working-directory: AgentContainment
         run: |
-          test "$(git rev-parse HEAD)" = "e7b16ba5477bbdaef8253404ec4ef0a2776481b1"
+          test "$(git rev-parse HEAD)" = "30af5059e926ff868079f170435b1b7c3b4010d1"
           test -r src/agent_containment/__init__.py
 
       - name: Set up Python
