@@ -192,7 +192,11 @@ jobs:
           WARRANTKIT_RUN_RUNTIME_INTEROP: "1"
           WARRANTKIT_REAL_KILL_ARTIFACT: ./real-kill-runtime-evidence.json
         run: |
-          sudo -E "$pythonLocation/bin/python" -m pytest -q tests/integration/test_real_cgroup_execution.py tests/test_runtime_pinned_interoperability.py
+          sudo env \
+            "AGENT_CONTAIN_RUN_REAL_CGROUP=$AGENT_CONTAIN_RUN_REAL_CGROUP" \
+            "WARRANTKIT_RUN_RUNTIME_INTEROP=$WARRANTKIT_RUN_RUNTIME_INTEROP" \
+            "WARRANTKIT_REAL_KILL_ARTIFACT=$WARRANTKIT_REAL_KILL_ARTIFACT" \
+            "$pythonLocation/bin/python" -m pytest -q tests/integration/test_real_cgroup_execution.py tests/test_runtime_pinned_interoperability.py
 
       - name: Generate isolated CI Ed25519 signing key
         run: |
@@ -268,7 +272,14 @@ jobs:
           AGENT_CONTAIN_RUN_REAL_CGROUP: "1"
           WARRANTKIT_INCIDENT_SIGNING_KEY_ID: warrantkit-ci-test-key
         run: |
-          sudo -E "$pythonLocation/bin/python" tools/run_real_kill_dpk_proof.py --output-dir ./real-kill-dpk-proof
+          sudo env \
+            "AGENT_CONTAIN_RUN_REAL_CGROUP=$AGENT_CONTAIN_RUN_REAL_CGROUP" \
+            "WARRANTKIT_INCIDENT_SIGNING_KEY_ID=$WARRANTKIT_INCIDENT_SIGNING_KEY_ID" \
+            "WARRANTKIT_INCIDENT_SIGNING_KEY_FILE=$WARRANTKIT_INCIDENT_SIGNING_KEY_FILE" \
+            "WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64=$WARRANTKIT_CI_TRUSTED_PUBLIC_KEY_B64" \
+            "WARRANTKIT_DPK_SIGNING_KEY_FILE=$WARRANTKIT_DPK_SIGNING_KEY_FILE" \
+            "WARRANTKIT_DPK_TRUSTED_KEY_ID=$WARRANTKIT_DPK_TRUSTED_KEY_ID" \
+            "$pythonLocation/bin/python" tools/run_real_kill_dpk_proof.py --output-dir ./real-kill-dpk-proof
 
       - name: Re-verify exported real-kill artifact
         run: |
