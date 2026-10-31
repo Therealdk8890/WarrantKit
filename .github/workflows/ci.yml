@@ -405,7 +405,7 @@ jobs:
 
       - name: Build AgentContainment eBPF programs
         working-directory: AgentContainment
-        run: scripts/build_ebpf.sh
+        run: bash scripts/build_ebpf.sh
 
       - name: Run privileged hostile-agent proof
         working-directory: AgentContainment
