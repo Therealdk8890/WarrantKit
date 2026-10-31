@@ -407,6 +407,15 @@ jobs:
         working-directory: AgentContainment
         run: bash scripts/build_ebpf.sh
 
+      - name: Diagnose cgroup delegation proof with visible pytest output
+        if: always()
+        continue-on-error: true
+        working-directory: AgentContainment
+        run: |
+          sudo env AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 \
+            "$pythonLocation/bin/python" -m pytest -vv -s -ra \
+            tests/integration/test_cgroup_delegation.py::test_non_root_process_uses_delegated_cgroup_subtree
+
       - name: Run privileged hostile-agent proof
         working-directory: AgentContainment
         run: |
