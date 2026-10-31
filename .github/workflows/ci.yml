@@ -71,7 +71,7 @@ jobs:
 
           version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
           readme = pathlib.Path("README.md").read_text()
-          assert f"Latest release: [`warrantkit {version}`]" in readme, (
+          assert any(label in readme for label in (f"Latest release: [`warrantkit {version}`]", f"Release candidate: [`warrantkit {version}`]")), (
               "README latest-release label does not match pyproject.toml"
           )
           assert f"warrantkit=={version}" in readme, (
