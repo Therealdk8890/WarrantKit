@@ -31,7 +31,7 @@ Therefore, the test must not report that an unlisted destination was blocked dur
 
 ## 3. Preconditions and lab setup
 
-Use a disposable Linux host with cgroup v2, the required root privileges or cgroup delegation, and a kernel compatible with the AgentContainment eBPF integration. Keep the controller outside the workload's trust boundary.
+Use a disposable Linux host with cgroup v2, the required root privileges or cgroup delegation, and a kernel compatible with the AgentContainment eBPF integration. The eBPF build also requires `clang`, `pkg-config`, `libbpf` development headers/libraries, a C compiler, and `dpkg-architecture` (the supplied build script targets Debian/Ubuntu-style environments). Keep the controller outside the workload's trust boundary.
 
 From the WarrantKit repository root:
 
@@ -41,6 +41,7 @@ git pull --ff-only
 git submodule update --init --recursive
 python -m pip install -e ./AgentContainment
 python -m pip install -e '.[test,langchain]'
+python -m pip install 'dprovenancekit[crypto]==0.7.1'
 ```
 
 Record the exact revisions before testing:
@@ -129,7 +130,7 @@ For the independent raw-socket/eBPF boundary, build and run the AgentContainment
 ```bash
 cd AgentContainment
 scripts/build_ebpf.sh
-AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
+sudo env AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
 ```
 
 **Pass criteria:**
@@ -158,9 +159,22 @@ AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
 
 ### Group 6 — Evidence history and independent verification
 
-**Action:** Export the controller/runtime evidence and incident bundle from the run. Where the combined DProvenanceKit proof is configured, run it with operator-controlled signing keys kept outside the workload. Verify the persisted artifacts, not only in-memory objects.
+**Action:** Run the combined proof with operator-controlled signing keys kept outside the workload, then verify the persisted artifacts, not only in-memory objects. This existing proof covers its own Warrant validation, one allowed gateway action, epoch transition, stale-authority rejection, and Linux terminal-state observation. It does **not** by itself execute or attest the complete six-group NIPRNet scenario: the denied-export fixture, dwell/raw-socket observations, and recovery transaction require separate test instrumentation and must not be inferred from this proof. Before running, provision the variables and trust anchors described in `docs/REAL_KILL_DPK_PROOF.md`: `WARRANTKIT_DPK_SIGNING_KEY_B64` or `WARRANTKIT_DPK_SIGNING_KEY_FILE`, `WARRANTKIT_DPK_TRUSTED_KEY_ID`, `WARRANTKIT_INCIDENT_SIGNING_KEY_FILE`, `WARRANTKIT_INCIDENT_SIGNING_KEY_ID`, and `WARRANTKIT_TRUSTED_PUBLIC_KEY_B64`. If using key files, keep them owner-only and inaccessible to the `nobody` workload identity. Do not place private keys in the workload environment or evidence bundle.
 
-The combined proof and verifier are documented in `docs/REAL_KILL_DPK_PROOF.md`:
+Run the combined proof from the repository root (the proof itself launches the real cgroup-v2 demo):
+
+```bash
+sudo -E env \
+  AGENT_CONTAIN_RUN_REAL_CGROUP=1 \
+  WARRANTKIT_DPK_SIGNING_KEY_B64="$WARRANTKIT_DPK_SIGNING_KEY_B64" \
+  WARRANTKIT_DPK_TRUSTED_KEY_ID="$WARRANTKIT_DPK_TRUSTED_KEY_ID" \
+  WARRANTKIT_INCIDENT_SIGNING_KEY_FILE="$WARRANTKIT_INCIDENT_SIGNING_KEY_FILE" \
+  WARRANTKIT_INCIDENT_SIGNING_KEY_ID="$WARRANTKIT_INCIDENT_SIGNING_KEY_ID" \
+  WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64" \
+  python tools/run_real_kill_dpk_proof.py --output-dir ./real-kill-dpk-proof
+```
+
+The combined proof and verifier are documented in `docs/REAL_KILL_DPK_PROOF.md`. To independently re-verify the delivered files:
 
 ```bash
 python tools/verify_real_kill_dpk_proof.py \
@@ -174,8 +188,8 @@ python tools/verify_real_kill_dpk_proof.py \
 **Pass criteria:**
 
 1. Evidence identifies the execution, runtime, policy, and relevant epochs.
-2. The event history records admission, allowed action, denied export attempt, dwell observations, containment, stale-authority rejection, recovery result, and terminal state where applicable.
-3. The evidence chain detects tampering, deletion, or reordering within the verifier's defined scope.
+2. The combined proof records Warrant validation, one allowed gateway action, containment, stale Warrant rejection, stale gateway-action rejection, and Linux-observed terminal state. Denied-export, dwell, and recovery evidence must be captured separately; the current combined proof does not produce those events.
+3. The evidence chain detects tampering and rejects a wrong DPK key within the verifier's defined scope. Do not claim it proves deletion/reordering detection for the entire six-group scenario unless those records are included in the signed artifact.
 4. The DPK signature verifies against the independently configured trusted key; wrong-key and tampered-artifact cases are rejected.
 5. Runtime evidence, incident-bundle manifest, and signed trace are bound to the exact persisted bytes being verified.
 
@@ -229,11 +243,11 @@ Publish the result with these fields. Do not replace NOT RUN or GAP with PASS.
 
 ## 8. Current-main review notes
 
-The WarrantKit main branch was reviewed at `6599417954202059ba0e96b628aa908b3085ea65` (PR #235), after the previously referenced `02b0c0b` (PR #234). The #235 changes observed in the merge commit are CI environment propagation for privileged proof commands and copyright notices; they do not change the core authority/containment flow in the reviewed diff.
+The WarrantKit main branch was re-checked after PR #237 merged at `882b1643f0a4c012542a7728cdf807f30fe492e8`. The protocol's commands were compared against that tree and its pinned AgentContainment submodule at `c3c010fb65ac06faaeb86a0208263e46e6b344d1`. The earlier source review at `6599417954202059ba0e96b628aa908b3085ea65` (PR #235) remains the baseline for the original scenario analysis.
 
 The current WarrantKit README and proof documentation describe the framework adapter's Warrant check and AgentContainment's separate controller-owned ActionGateway lease. The current egress contract explicitly distinguishes the deny-after-containment mechanism from a general destination allowlist. AgentContainment's egress proof describes a raw-socket connection before containment and a blocked attempt after containment.
 
-This was a source/documentation review through the current main branch. It was **not** a fresh privileged Linux execution of all six groups on commit `6599417`. The older local mechanics-harness results at `e905e0d` must not be relabeled as a current-main run. Re-run the lab procedure on the exact revisions recorded by the operator before making a current implementation claim.
+This was a source/command review through WarrantKit main at `882b1643f0a4c012542a7728cdf807f30fe492e8` and the pinned AgentContainment submodule at `c3c010fb65ac06faaeb86a0208263e46e6b344d1`. The documented script paths, environment flags, and verifier CLI arguments were confirmed against those revisions. The PR #238 GitHub Actions run (`41186318461`) then completed the **Linux cgroup-v2 workload proof** successfully. That job ran the real child-process containment proof, generated per-run Ed25519 and DPK keys, ran `tools/run_real_kill_dpk_proof.py`, verified the incident bundle against the separately configured trust anchor, and passed the signed cross-artifact verifier. Its uploaded `real-kill-dpk-proof` artifact records epoch `0 → 1`, an independently observed empty cgroup, workload exit code `-9`, DPK `trustedKey` verification, wrong-key rejection (`untrustedKey`), tamper rejection (`digestMismatch`), and an authenticated incident bundle. This is a successful current Linux real-kill/DPK proof for the deterministic workload. It is **not** execution of all six NIPRNet scenario groups, and this workflow did not run the separate AgentContainment eBPF hostile-agent demo. The older local mechanics-harness results at `e905e0d` must not be relabeled as a current-main run.
 
 ## 9. Related implementation documents
 
