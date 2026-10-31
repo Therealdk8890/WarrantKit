@@ -71,7 +71,7 @@ jobs:
 
           version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
           readme = pathlib.Path("README.md").read_text()
-          assert f"Latest release: [`warrantkit {version}`]" in readme, (
+          assert any(label in readme for label in (f"Latest release: [`warrantkit {version}`]", f"Release candidate: [`warrantkit {version}`]")), (
               "README latest-release label does not match pyproject.toml"
           )
           assert f"warrantkit=={version}" in readme, (
@@ -383,7 +383,7 @@ jobs:
       - name: Verify pinned AgentContainment revision
         working-directory: AgentContainment
         run: |
-          test "$(git rev-parse HEAD)" = "30af5059e926ff868079f170435b1b7c3b4010d1"
+          test "$(git rev-parse HEAD)" = "9738c772aff900eb0ce5f1f9d93760d2f9e5de4f"
           test -r src/agent_containment/__init__.py
 
       - name: Set up Python
