@@ -159,23 +159,23 @@ AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
 
 ### Group 6 — Evidence history and independent verification
 
-**Action:** Run the combined proof with operator-controlled signing keys kept outside the workload, then verify the persisted artifacts, not only in-memory objects. Before running, provision the variables and trust anchors described in `docs/REAL_KILL_DPK_PROOF.md`: `WARRANTKIT_DPK_SIGNING_KEY_B64` or `WARRANTKIT_DPK_SIGNING_KEY_FILE`, `WARRANTKIT_DPK_TRUSTED_KEY_ID`, and `WARRANTKIT_TRUSTED_PUBLIC_KEY_B64`. If using key files, keep them owner-only and inaccessible to the `nobody` workload identity. Do not place private keys in the workload environment or evidence bundle.
+**Action:** Run the combined proof with operator-controlled signing keys kept outside the workload, then verify the persisted artifacts, not only in-memory objects. This existing proof covers its own Warrant validation, one allowed gateway action, epoch transition, stale-authority rejection, and Linux terminal-state observation. It does **not** by itself execute or attest the complete six-group NIPRNet scenario: the denied-export fixture, dwell/raw-socket observations, and recovery transaction require separate test instrumentation and must not be inferred from this proof. Before running, provision the variables and trust anchors described in `docs/REAL_KILL_DPK_PROOF.md`: `WARRANTKIT_DPK_SIGNING_KEY_B64` or `WARRANTKIT_DPK_SIGNING_KEY_FILE`, `WARRANTKIT_DPK_TRUSTED_KEY_ID`, and `WARRANTKIT_TRUSTED_PUBLIC_KEY_B64`. If using key files, keep them owner-only and inaccessible to the `nobody` workload identity. Do not place private keys in the workload environment or evidence bundle.
 
 Run the combined proof from the repository root (the proof itself launches the real cgroup-v2 demo):
 
 ```bash
-sudo -E env \\
-  AGENT_CONTAIN_RUN_REAL_CGROUP=1 \\
-  WARRANTKIT_DPK_SIGNING_KEY_B64="$WARRANTKIT_DPK_SIGNING_KEY_B64" \\
-  WARRANTKIT_DPK_TRUSTED_KEY_ID="$WARRANTKIT_DPK_TRUSTED_KEY_ID" \\
-  WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64" \\
+sudo -E env \
+  AGENT_CONTAIN_RUN_REAL_CGROUP=1 \
+  WARRANTKIT_DPK_SIGNING_KEY_B64="$WARRANTKIT_DPK_SIGNING_KEY_B64" \
+  WARRANTKIT_DPK_TRUSTED_KEY_ID="$WARRANTKIT_DPK_TRUSTED_KEY_ID" \
+  WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64" \
   python tools/run_real_kill_dpk_proof.py --output-dir ./real-kill-dpk-proof
 ```
 
 The combined proof and verifier are documented in `docs/REAL_KILL_DPK_PROOF.md`. To independently re-verify the delivered files:
 
 ```bash
-python tools/verify_real_kill_dpk_proof.py \\
+python tools/verify_real_kill_dpk_proof.py \
   --attestation ./real-kill-dpk-proof/dpk-attestation.json \
   --runtime-evidence ./real-kill-dpk-proof/runtime-evidence.json \
   --incident-bundle ./real-kill-dpk-proof/incident-bundle \
@@ -186,8 +186,8 @@ python tools/verify_real_kill_dpk_proof.py \\
 **Pass criteria:**
 
 1. Evidence identifies the execution, runtime, policy, and relevant epochs.
-2. The event history records admission, allowed action, denied export attempt, dwell observations, containment, stale-authority rejection, recovery result, and terminal state where applicable.
-3. The evidence chain detects tampering, deletion, or reordering within the verifier's defined scope.
+2. The combined proof records Warrant validation, one allowed gateway action, containment, stale Warrant rejection, stale gateway-action rejection, and Linux-observed terminal state. Denied-export, dwell, and recovery evidence must be captured separately; the current combined proof does not produce those events.
+3. The evidence chain detects tampering and rejects a wrong DPK key within the verifier's defined scope. Do not claim it proves deletion/reordering detection for the entire six-group scenario unless those records are included in the signed artifact.
 4. The DPK signature verifies against the independently configured trusted key; wrong-key and tampered-artifact cases are rejected.
 5. Runtime evidence, incident-bundle manifest, and signed trace are bound to the exact persisted bytes being verified.
 
