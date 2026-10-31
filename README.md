@@ -171,3 +171,7 @@ WarrantKit complements rather than replaces IAM, policy engines, host isolation,
 ## License
 
 Apache-2.0.
+
+---
+
+Copyright 2026 Daniel Paul Kissel
