@@ -130,7 +130,7 @@ For the independent raw-socket/eBPF boundary, build and run the AgentContainment
 ```bash
 cd AgentContainment
 scripts/build_ebpf.sh
-AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
+sudo env AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
 ```
 
 **Pass criteria:**
@@ -159,7 +159,7 @@ AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 python demo/hostile_agent_demo.py
 
 ### Group 6 — Evidence history and independent verification
 
-**Action:** Run the combined proof with operator-controlled signing keys kept outside the workload, then verify the persisted artifacts, not only in-memory objects. This existing proof covers its own Warrant validation, one allowed gateway action, epoch transition, stale-authority rejection, and Linux terminal-state observation. It does **not** by itself execute or attest the complete six-group NIPRNet scenario: the denied-export fixture, dwell/raw-socket observations, and recovery transaction require separate test instrumentation and must not be inferred from this proof. Before running, provision the variables and trust anchors described in `docs/REAL_KILL_DPK_PROOF.md`: `WARRANTKIT_DPK_SIGNING_KEY_B64` or `WARRANTKIT_DPK_SIGNING_KEY_FILE`, `WARRANTKIT_DPK_TRUSTED_KEY_ID`, and `WARRANTKIT_TRUSTED_PUBLIC_KEY_B64`. If using key files, keep them owner-only and inaccessible to the `nobody` workload identity. Do not place private keys in the workload environment or evidence bundle.
+**Action:** Run the combined proof with operator-controlled signing keys kept outside the workload, then verify the persisted artifacts, not only in-memory objects. This existing proof covers its own Warrant validation, one allowed gateway action, epoch transition, stale-authority rejection, and Linux terminal-state observation. It does **not** by itself execute or attest the complete six-group NIPRNet scenario: the denied-export fixture, dwell/raw-socket observations, and recovery transaction require separate test instrumentation and must not be inferred from this proof. Before running, provision the variables and trust anchors described in `docs/REAL_KILL_DPK_PROOF.md`: `WARRANTKIT_DPK_SIGNING_KEY_B64` or `WARRANTKIT_DPK_SIGNING_KEY_FILE`, `WARRANTKIT_DPK_TRUSTED_KEY_ID`, `WARRANTKIT_INCIDENT_SIGNING_KEY_FILE`, `WARRANTKIT_INCIDENT_SIGNING_KEY_ID`, and `WARRANTKIT_TRUSTED_PUBLIC_KEY_B64`. If using key files, keep them owner-only and inaccessible to the `nobody` workload identity. Do not place private keys in the workload environment or evidence bundle.
 
 Run the combined proof from the repository root (the proof itself launches the real cgroup-v2 demo):
 
@@ -168,6 +168,8 @@ sudo -E env \
   AGENT_CONTAIN_RUN_REAL_CGROUP=1 \
   WARRANTKIT_DPK_SIGNING_KEY_B64="$WARRANTKIT_DPK_SIGNING_KEY_B64" \
   WARRANTKIT_DPK_TRUSTED_KEY_ID="$WARRANTKIT_DPK_TRUSTED_KEY_ID" \
+  WARRANTKIT_INCIDENT_SIGNING_KEY_FILE="$WARRANTKIT_INCIDENT_SIGNING_KEY_FILE" \
+  WARRANTKIT_INCIDENT_SIGNING_KEY_ID="$WARRANTKIT_INCIDENT_SIGNING_KEY_ID" \
   WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64" \
   python tools/run_real_kill_dpk_proof.py --output-dir ./real-kill-dpk-proof
 ```
