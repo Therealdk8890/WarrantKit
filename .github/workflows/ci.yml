@@ -426,6 +426,9 @@ jobs:
         working-directory: AgentContainment
         run: |
           sudo env \
+            "GITHUB_REPOSITORY=$GITHUB_REPOSITORY" \
+            "GITHUB_SHA=$GITHUB_SHA" \
+            "GITHUB_RUN_ID=$GITHUB_RUN_ID" \
             AGENT_CONTAINMENT_RUN_PRIVILEGED_TESTS=1 \
             "$pythonLocation/bin/python" demo/hostile_agent_demo.py
 
@@ -435,5 +438,5 @@ jobs:
         with:
           name: agentcontainment-hostile-agent-evidence
           path: AgentContainment/hostile-agent-evidence.json
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
