@@ -4,13 +4,13 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/warrantkit)](https://pypi.org/project/warrantkit/)
 
-**Release candidate: [`warrantkit 0.1.6`](https://github.com/Therealdk8890/WarrantKit/releases)** · [PyPI package](https://pypi.org/project/warrantkit/)
+**Latest release: [`warrantkit 0.1.6`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.1.6)** · [PyPI package](https://pypi.org/project/warrantkit/)
 
 **Release focus:** External Proof Package and Evaluation Readiness.
 
 ## Install the 0.1.6 release
 
-WarrantKit 0.1.6 is prepared as a release candidate and will be available from PyPI when the release is published. Once published, install the exact release with Python 3.11 or newer:
+WarrantKit 0.1.6 is published. Install the exact release with Python 3.11 or newer:
 
 ```bash
 python -m pip install --upgrade warrantkit==0.1.6
@@ -28,7 +28,7 @@ python -m pip install "warrantkit[mcp]"  # synchronous Python handlers on raw MC
 
 The portable `warrantkit demo` is a simulated lifecycle demonstration, not proof of kernel-level process containment. For the strongest containment claim, use the environment-gated Linux cgroup-v2 proof described below.
 
-**New here?** Follow the [getting-started guide](docs/GETTING_STARTED.md) to run the deterministic framework-to-gateway proof, choose your framework adapter, and understand the enforcement boundary.
+**New here?** Start with the [security overview](docs/SECURITY_OVERVIEW.md) for the incident/evidence story and deployment boundaries, then follow the [getting-started guide](docs/GETTING_STARTED.md) to run the deterministic framework-to-gateway proof.
 
 **Authority that stops being valid when the runtime state that created it changes.**
 
@@ -44,7 +44,7 @@ The current OSS implementation is a local authority-lifecycle and runtime-enforc
 | Controller-owned ActionGateway enforcement | Implemented and covered by the framework boundary proof | The adapter checks the Warrant before invoking the gateway; the gateway independently enforces its controller-owned execution lease. A serialized Warrant is not a gateway bearer credential. |
 | Framework / tool adapters | LangChain and CrewAI adapters; OpenAI Agents SDK local function-tool adapter; raw MCP synchronous Python-handler wrapper | Hosted tools, remote MCP servers, async-native MCP execution, and alternate side-effect paths are not automatically protected. |
 | Real process containment | Linux cgroup-v2 proof implemented and exercised in privileged CI | Requires Linux and suitable root/delegated cgroup privileges. It is not a universal host-isolation guarantee. |
-| Evidence and incident bundles | Bundle writer, standalone verifier, and optional Ed25519-authenticated Warrant/receipt artifacts | A trusted public key must be provisioned independently. Internal consistency or a valid signature does not prove the underlying claim is true. |
+| Evidence and incident bundles | Signed Warrants and full incident-bundle receipts use Ed25519; the short real-kill walkthrough's runtime receipt uses HMAC | Ed25519 authentication requires an independently provisioned trusted public key. HMAC is shared-secret authentication, not non-repudiable attestation. Neither mechanism proves every underlying claim true or establishes host integrity. |
 | ClaimProofKit provenance integration | CI test uses ClaimProofKit's public APIs to create a claim report and provenance trace, then round-trips it through a signed WarrantKit incident bundle | The test validates provenance integrity and records the verifier verdict separately; claim truth and runtime enforcement are not established by provenance alone. |
 | Hosted commercial control plane | Not part of this OSS repository's shipped boundary | The separate [WarrantKit Commercial](https://github.com/Therealdk8890/WarrantKit-Commercial) repository implements tenant-scoped bearer-token authentication and incident-bundle ingestion/verification. This is a minimal token-to-organization boundary, not full enterprise IAM/RBAC; production readiness still depends on secret management, token lifecycle controls, deployment hardening, and external validation. |
 
@@ -124,6 +124,15 @@ The checks protect different boundaries: the Warrant check rejects stale authori
 
 **Evidence never grants authority. Verified does not mean an external claim is true.** Ed25519 signatures authenticate a payload relative to a separately trusted public key; they do not attest that every claim is true or that the host/kernel is uncompromised.
 
+### Which cryptographic mechanism protects which artifact?
+
+- **Signed Warrants:** Ed25519. Protected framework adapters verify the Warrant against a deployment-configured trusted public key before the protected tool handler runs. The private signing key must remain outside the agent process.
+- **Full incident-bundle receipt:** Ed25519. The verifier reports `AUTHENTICATED` only when the signature validates against an independently provisioned operator public key. Verification with only the key embedded in the bundle is `INTEGRITY_ONLY` and does not authenticate the producer.
+- **Short `tools/real_kill_demo.py` runtime receipt:** HMAC shared-secret authentication. It detects tampering and authenticates possession of the shared secret; it is not asymmetric signing or non-repudiable attestation.
+- **Portable runtime evidence:** structural/integrity verification is a separate check from producer authentication. Do not treat a passing integrity check as proof of who produced the evidence.
+
+See [Security Overview](docs/SECURITY_OVERVIEW.md#cryptographic-mechanisms-do-not-conflate-them), [real-kill trust boundaries](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation), and [trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
+
 ## Epoch fencing is not expiry
 
 Epoch fencing invalidates every retained Warrant tied to an older runtime generation when the controller advances the epoch. This is a known fencing-token pattern, not a claim that epoch checks are unique to WarrantKit.
@@ -154,6 +163,8 @@ WarrantKit complements rather than replaces IAM, policy engines, host isolation,
 
 ## Further reading
 
+- [Security overview for evaluators](docs/SECURITY_OVERVIEW.md)
+- [Kubernetes deployment considerations and limitations](docs/KUBERNETES_DEPLOYMENT.md)
 - [External proof package: reproduce, inspect, and verify WarrantKit evidence](docs/EXTERNAL_PROOF_PACKAGE.md)
 
 - [Incident bundle API and trust model](docs/INCIDENT_BUNDLE_API.md)

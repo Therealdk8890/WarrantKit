@@ -6,6 +6,24 @@ Validate WarrantKit against teams that already operate autonomous or coding agen
 
 The goal is not to collect generic feedback. The goal is to discover whether the external authority, hard-stop enforcement, epoch lifecycle, and independently verifiable evidence model solve a problem important enough to change deployment behavior or justify paid operational capabilities.
 
+## 30-day validation target
+
+The next milestone is one independent technical evaluation—not another feature release.
+
+- **Days 1–5:** finalize the security overview, reproducible proof instructions, Kubernetes boundary statement, and evaluation record. Identify 10 named teams with an existing coding-agent or autonomous-agent workload.
+- **Days 6–15:** conduct targeted outreach and seek 5–10 qualified discovery conversations. Ask about the team's actual workload and current containment path before presenting WarrantKit.
+- **Days 16–23:** select the strongest qualified candidate and agree on a sanitized, bounded technical evaluation. Confirm Linux/cgroup-v2 and privilege prerequisites before scheduling the proof.
+- **Days 24–30:** run the proof with the partner's representative workload, record failures and objections, and decide whether the problem and deployment model justify continued investment.
+
+**Decision rule:** if no qualified team will commit a representative workload or technical evaluation within 30 days, do not respond by adding features. Reassess the target customer, urgency, deployment assumptions, and core problem statement.
+
+Existing outreach should be recorded before sending duplicates. Track each organization, contact, role, date, response, workload qualification, next commitment, and reason for decline. A follow or connection is not a design-partner commitment.
+
+## Feature-freeze rule
+
+Until a partner evaluation produces evidence, keep the product surface stable. Do not implement SSO/OIDC, external audit anchoring, new tenant/permission layers, or additional control-plane endpoints merely because they are common enterprise requests. Capture the requirement, identify the buyer and deployment blocker, and seek confirmation from more than one qualified team before committing roadmap work. Fix correctness, security, reproducibility, and documentation defects in the existing proof path; those are not feature expansion.
+
+
 ## Product boundary and current proof options
 
 WarrantKit coordinates authority lifecycle, policy-bound Warrants, gateway integration, and evidence. AgentContainment remains the separate runtime enforcement engine. Evidence and signatures support verification; they do not themselves grant authority, prove every underlying claim true, or establish host integrity.
