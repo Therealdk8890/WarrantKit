@@ -24,16 +24,17 @@ The Warrant and gateway lease are separate checks in the current implementation.
 
 ## Evidence card: independently inspectable proof
 
-**Published privileged CI proof**
+**Latest inspected privileged CI proof on this documentation branch (2026-10-31 UTC)**
 
-- Source revision: [0fcf8d41ee9c](https://github.com/Therealdk8890/WarrantKit/commit/0fcf8d41ee9c0a2c5e8247d7ce3b37e9fd0260cd)
-- CI run: [Full proof run](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578)
-- Host-containment job: [Linux cgroup-v2 workload proof](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578/job/117545604999)
-- Framework boundary job: [Framework authority-boundary proof](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578/job/117545605024)
-- Artifact: real-kill-incident-bundle, downloadable from the run's Artifacts section while retained.
-- Authenticated-verification result documented for that run: AUTHENTICATED, when verified with the per-run Ed25519 public key published separately in that run's summary.
+- Source revision: [77d401d](https://github.com/Therealdk8890/WarrantKit/commit/77d401dfe62ea19a65c6deec5cebc81a5203a1ce)
+- CI run: [WarrantKit CI #735](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356)
+- Host-containment job: [Linux cgroup-v2 workload proof](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356/job/124693423680)
+- Framework boundary job: [Framework authority-boundary proof](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356/job/124693423679)
+- All eight jobs in this run completed successfully, including hostile-agent, unit/adapter, CrewAI, TOCTOU, benchmark, clean-install, framework-boundary, and Linux cgroup-v2 proofs.
+- Downloadable evidence: [real-kill-dpk-proof artifact](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356/artifacts/13061693695) (13 files; GitHub retention expires 2027-01-29 unless retained or re-published).
+- Host proof observed: authorized action executed; stale pre-containment Warrant rejected; gateway rejected the stale action before executor; cgroup_populated=False; workload exit code -9; runtime evidence verified as OBSERVED; DPK trusted-key verification succeeded and wrong-key/tamper checks rejected; incident bundle verified as AUTHENTICATED against the separately supplied CI trust anchor; signed cross-artifact bindings verified.
 
-The CI key is ephemeral and belongs only to that run. It is not a production operator identity or a permanent trust anchor. The linked run is dated 2026-10-18; use a newer successful run before presenting it as current validation.
+The CI signing key and trust anchor are isolated test material for this workflow run. The public trust value is visible in the workflow log; it is not a secret or a production operator identity. This run proves the tested CI environment and configured path only. It does not prove Kubernetes deployment, universal host isolation, formal verification, or production key custody. The artifact is attached to a PR-branch run and should not be presented as a permanent release artifact without re-running or retaining it through a controlled release process.
 
 ## Cryptographic mechanisms: do not conflate them
 
