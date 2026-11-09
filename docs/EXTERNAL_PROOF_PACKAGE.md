@@ -55,24 +55,26 @@ python tools/verify_incident_bundle.py ./incident-bundle
 
 Without an independently provisioned trusted public key, the bundle's default verification is an integrity check, not producer authentication. For the trust model and operator-controlled key setup, follow [Incident Trust-Anchor Operations](INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
-## Recent independently inspectable CI evidence
+## Latest inspected privileged CI evidence
 
-The following public GitHub Actions run completed successfully on **2026-10-18** for commit [`0fcf8d41ee9c`](https://github.com/Therealdk8890/WarrantKit/commit/0fcf8d41ee9c0a2c5e8247d7ce3b37e9fd0260cd):
+The latest inspected privileged CI proof completed successfully on **2026-10-31 UTC** for source revision [`77d401d`](https://github.com/Therealdk8890/WarrantKit/commit/77d401dfe62ea19a65c6deec5cebc81a5203a1ce):
 
-- [Full CI run and job logs](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578)
-- [Linux cgroup-v2 workload proof job](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578/job/117545604999)
-- [Framework authority-boundary proof job](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578/job/117545605024)
+- [WarrantKit CI run #735](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356)
+- [Linux cgroup-v2 workload proof job](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356/job/124693423680)
+- [Framework authority-boundary proof job](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356/job/124693423679)
+- All eight jobs in that run completed successfully, including hostile-agent, unit/adapter, CrewAI, TOCTOU, benchmark, clean-install, framework-boundary, and Linux cgroup-v2 proofs.
+- Downloadable evidence: [real-kill-dpk-proof artifact](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356/artifacts/13061693695) (13 files; GitHub retention expires **2027-01-29** unless retained or re-published).
 
-The run uploaded a `real-kill-incident-bundle` artifact. Download it from the run's **Artifacts** section. The run summary provides the ephemeral Ed25519 public key used separately by CI to verify that run's bundle. Use that key only for the artifact from the same run.
+The host proof recorded an authorized action, rejection of a stale pre-containment Warrant, gateway rejection before the executor, an empty cgroup (`cgroup_populated=False`), and workload exit code `-9`. Runtime evidence verified as `OBSERVED`; DProvenanceKit trusted-key verification succeeded while wrong-key and tamper checks were rejected; the incident bundle verified as `AUTHENTICATED` against the separately supplied CI trust anchor; and signed cross-artifact bindings verified.
 
-**Artifact retention:** this example artifact is scheduled to expire on **2027-01-16**. The run and instructions remain useful after the artifact expires, but a new successful CI run will be needed for a current downloadable bundle. CI's ephemeral key demonstrates verification relative to that run's key; it is not a production identity, permanent trust anchor, or host attestation.
+**Evidence scope:** this was a privileged CI run on a PR branch. It is inspectable evidence for the exact tested revision and CI environment, not a release-tag proof, permanent production trust anchor, production operator identity, Kubernetes validation, universal host-isolation guarantee, or proof of host integrity. The ephemeral CI public key is test material for that run only. Re-run and retain the proof through a controlled release process before presenting it as release-specific evidence.
 
 ## How to verify the CI artifact
 
-1. Open the [CI run](https://github.com/Therealdk8890/WarrantKit/actions/runs/39083610578).
-2. Download and extract `real-kill-incident-bundle`.
-3. In the run summary, copy the **Trusted public key (base64 raw Ed25519)** generated for that exact run.
-4. From the extracted directory's parent, run:
+1. Open the [CI run](https://github.com/Therealdk8890/WarrantKit/actions/runs/41254034356).
+2. Download and extract `real-kill-dpk-proof` from the run's **Artifacts** section.
+3. Obtain the **Trusted public key (base64 raw Ed25519)** generated for that exact run from its summary/log output. Do not reuse a key from another run.
+4. From a WarrantKit checkout containing the verifier scripts, run:
 
    ```bash
    export WARRANTKIT_TRUSTED_PUBLIC_KEY_B64="<public key copied from that run's summary>"
@@ -81,10 +83,10 @@ The run uploaded a `real-kill-incident-bundle` artifact. Download it from the ru
      --trusted-public-key "$WARRANTKIT_TRUSTED_PUBLIC_KEY_B64"
    ```
 
-   Run the commands from a WarrantKit checkout containing the verifier scripts; adjust the extracted bundle path if needed.
-5. Preserve the verifier output, the exact source commit, the CI run URL, and the environment details together.
+   Adjust the extracted artifact paths to match the downloaded bundle layout.
+5. Preserve the verifier output, exact source revision, CI run URL, and environment details together.
 
-The expected authenticated result for that CI artifact is `AUTHENTICATED`. This means the bundle signature verifies against the public key supplied separately to the verifier. It does not prove that the CI runner or host was uncompromised, that the event's underlying claims are true, or that a production operator produced the evidence.
+The expected authenticated result for the incident bundle is `AUTHENTICATED`. This means the bundle signature verifies against the public key supplied separately to the verifier. It does not prove that the CI runner or host was uncompromised, that the event's underlying claims are true, or that a production operator produced the evidence.
 
 ## Evaluation checklist
 
