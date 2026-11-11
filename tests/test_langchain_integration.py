@@ -262,3 +262,47 @@ def test_langchain_wrapper_rejects_replay_of_another_valid_signed_warrant():
     with pytest.raises(LangChainWarrantError, match="authority changed"):
         wrapped.invoke({"value": "must-not-run"})
     assert calls == []
+
+
+
+def test_langchain_denies_warrant_revoked_during_gateway_policy(monkeypatch):
+    from datetime import datetime, timezone
+    pytest.importorskip("langchain_core")
+    from langchain_core.tools import tool
+    from agentcontain.integrations.langchain import (
+        LangChainWarrantError, wrap_langchain_tool,
+    )
+
+    calls = []
+    @tool
+    def protected_write(value: str) -> str:
+        """Write a test record."""
+        calls.append(value)
+        return "written"
+
+    engine = build_agentcontainment_engine("langchain-revoke-policy")
+    signer = Ed25519Signer.generate("langchain-revoke-policy")
+    admission = admit(
+        Policy("langchain-revoke-policy", capabilities=("protected_write",)),
+        agent_id="langchain-revoke-policy",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+        warrant_signer=signer,
+    )
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    verifier = Ed25519Verifier({signer.key_id: signer.public_key()})
+    protected = wrap_langchain_tool(
+        protected_write, admission, gateway, warrant_verifier=verifier
+    )
+    evaluate = gateway.policy.evaluate
+
+    def revoke_during_policy(action):
+        admission.warrant = admission.warrant.revoke(
+            revoked_at=datetime.now(timezone.utc)
+        )
+        return evaluate(action)
+
+    monkeypatch.setattr(gateway.policy, "evaluate", revoke_during_policy)
+    with pytest.raises(LangChainWarrantError):
+        protected.invoke({"value": "must-not-execute"})
+    assert calls == []

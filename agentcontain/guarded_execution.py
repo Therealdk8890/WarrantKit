@@ -15,7 +15,7 @@ from typing import Callable, TypeVar
 
 from agent_containment.models import Action, Decision
 from .engine import Admission
-from .integrations._authority import verify_current_authority
+from .integrations._authority import verify_current_capability
 
 
 T = TypeVar("T")
@@ -56,21 +56,17 @@ class BoundGuardedExecution:
         )
 
     def _verify(self, action: Action) -> None:
-        verify_current_authority(
+        verify_current_capability(
             self._admission,
             self._gateway,
             self._warrant_verifier,
             self._expected_snapshot,
+            action.operation,
             error_type=GuardedExecutionDenied,
             framework="guarded execution",
         )
         if action.agent_id != self._admission.identity.agent_id:
             raise GuardedExecutionDenied("action subject does not match admission")
-        warrant = self._admission.warrant
-        if warrant is None or action.operation not in warrant.authority.capabilities:
-            raise GuardedExecutionDenied(
-                f"Warrant does not grant capability '{action.operation}'"
-            )
 
     def execute(self, action: Action, executor: Callable[[Action], T]) -> T:
         """Execute only when current signed authority and gateway lease agree.

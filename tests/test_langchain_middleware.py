@@ -120,3 +120,27 @@ def test_native_middleware_rejects_contain_recover_race_after_snapshot(monkeypat
     assert transitioned
     assert runtime.epoch == admission.identity.epoch + 2
     assert calls == []
+
+
+
+def test_langchain_middleware_denies_revocation_during_gateway_policy(monkeypatch):
+    from datetime import datetime, timezone
+    middleware, admission = _middleware(
+        "middleware-revoke-policy", ("payments_refund",)
+    )
+    calls = []
+    evaluate = middleware.gateway.policy.evaluate
+
+    def revoke_during_policy(action):
+        admission.warrant = admission.warrant.revoke(
+            revoked_at=datetime.now(timezone.utc)
+        )
+        return evaluate(action)
+
+    monkeypatch.setattr(middleware.gateway.policy, "evaluate", revoke_during_policy)
+    with pytest.raises(LangChainWarrantError):
+        middleware.wrap_tool_call(
+            _Request("payments_refund"),
+            lambda request: calls.append(request.tool.name),
+        )
+    assert calls == []

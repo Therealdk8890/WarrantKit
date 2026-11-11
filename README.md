@@ -106,7 +106,7 @@ current runtime epoch, expiry, revocation, subject/policy, and the action's
 controller-owned lease-guarded executor callback. Missing authority,
 gateway denial, and runtime state changes fail closed.
 
-This protects only actions actually routed through the trusted gateway.
+The LangChain tool, LangChain middleware, CrewAI, OpenAI Agents, and MCP synchronous wrappers also verify signed Warrant authority a second time inside their lease-guarded executor callbacks, after gateway policy evaluation. This closes preflight expiry/revocation check/use gaps for those wrapped paths.\n\nThis protects only actions actually routed through the trusted gateway.
 The Python object is **not** a host isolation boundary; the agent must not
 hold alternate credentials or an unrestricted route to protected downstream
 side effects. The API is synchronous only and does not promise to interrupt

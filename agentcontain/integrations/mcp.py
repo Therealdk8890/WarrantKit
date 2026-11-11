@@ -14,7 +14,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..engine import Admission
-from ._authority import verify_current_authority
+from ._authority import verify_current_authority, verify_current_capability
 
 
 class MCPWarrantError(RuntimeError):
@@ -101,10 +101,17 @@ def wrap_mcp_tool(
             risk=risk,
             metadata={"framework": "mcp"},
         )
+        def guarded_callback(_action):
+            verify_current_capability(
+                admission, gateway, warrant_verifier, expected_snapshot,
+                required_capability, error_type=MCPWarrantError, framework="MCP",
+            )
+            return function(*args, **kwargs)
+
         result = gateway.execute_with_lease(
             action,
             execution_lease,
-            lambda _action: function(*args, **kwargs),
+            guarded_callback,
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
             raise MCPWarrantError(

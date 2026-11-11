@@ -100,3 +100,28 @@ def verify_current_authority(
     accepted_capabilities = set(admission.policy.policy.capabilities)
     if not set(warrant.authority.capabilities).issubset(accepted_capabilities):
         reject("Warrant capabilities exceed the accepted policy")
+
+
+
+def verify_current_capability(
+    admission: Admission,
+    gateway,
+    warrant_verifier,
+    expected_snapshot,
+    required_capability: str,
+    *,
+    error_type: Type[RuntimeError],
+    framework: str,
+) -> None:
+    """Verify signed authority and capability inside a guarded side-effect callback.
+
+    Call after gateway policy evaluation, under Runtime.execute_if_active's
+    lease fence, in addition to any preflight verification.
+    """
+    verify_current_authority(
+        admission, gateway, warrant_verifier, expected_snapshot,
+        error_type=error_type, framework=framework,
+    )
+    warrant = admission.warrant
+    if warrant is None or required_capability not in warrant.authority.capabilities:
+        raise error_type(f"Warrant does not grant capability '{required_capability}'")

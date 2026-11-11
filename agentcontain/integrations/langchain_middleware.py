@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from ..engine import Admission
 from .langchain import LangChainWarrantError, _verify_current_authority
+from ._authority import verify_current_capability
 
 
 class WarrantKitMiddleware:
@@ -90,10 +91,18 @@ class WarrantKitMiddleware:
             risk=self.risk,
             metadata={"framework": "langchain", "integration": "middleware"},
         )
+        def guarded_callback(_action):
+            verify_current_capability(
+                self.admission, self.gateway, self.warrant_verifier,
+                self.expected_snapshot, required_capability,
+                error_type=LangChainWarrantError, framework="LangChain middleware",
+            )
+            return handler(request)
+
         result = self.gateway.execute_with_lease(
             action,
             execution_lease,
-            lambda _action: handler(request),
+            guarded_callback,
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
             raise LangChainWarrantError(

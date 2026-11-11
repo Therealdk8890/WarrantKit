@@ -11,7 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from ..engine import Admission
-from ._authority import verify_current_authority
+from ._authority import verify_current_authority, verify_current_capability
 
 
 class CrewAIWarrantError(RuntimeError):
@@ -104,10 +104,17 @@ def wrap_crewai_tool(
             risk=risk,
             metadata={"framework": "crewai"},
         )
+        def guarded_callback(_action):
+            verify_current_capability(
+                admission, gateway, warrant_verifier, expected_snapshot,
+                required_capability, error_type=CrewAIWarrantError, framework="CrewAI",
+            )
+            return tool.run(**kwargs)
+
         result = gateway.execute_with_lease(
             action,
             execution_lease,
-            lambda _action: tool.run(**kwargs),
+            guarded_callback,
         )
         if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
             raise CrewAIWarrantError(
