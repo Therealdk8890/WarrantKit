@@ -117,6 +117,20 @@ hold alternate credentials or an unrestricted route to protected downstream
 side effects. The API is synchronous only and does not promise to interrupt
 a side effect already in progress.
 
+**AgentContainment compatibility boundary.** WarrantKit's current CI/proof
+submodule is pinned to a runtime that invokes callbacks under the lifecycle lock.
+A newer AgentContainment source revision uses atomic *admission*, then invokes
+callbacks without holding that lock. It can fence new work promptly while an
+already-admitted callback is in flight. WarrantKit's final in-callback Warrant
+check is not an atomic external-side-effect commit in that design: a later
+containment transition cannot retract a previously admitted callback or cancel
+a downstream operation. Keep agent-owned credentials out of the agent process,
+enforce revocation/cancellation at the downstream boundary, and do not claim
+that no effects can complete after a fence. The dedicated newer-runtime CI job
+covers new-admission rejection and in-flight behavior using an immutable source
+revision. This compatibility check does not replace a separate production
+enforcement or release-security review.
+
 ## Agent integration
 
 The LangChain adapter protects a tool by admitting an execution under a policy, wrapping the tool with the admission and gateway, and then containing the execution when needed. This abbreviated example shows the shape; see the [complete runnable integration](docs/INTEGRATIONS_AND_PROOFS.md#langchain-integration) for imports, signer setup, and trusted-key configuration.
