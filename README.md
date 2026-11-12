@@ -130,6 +130,8 @@ that no effects can complete after a fence. The dedicated newer-runtime CI job
 covers new-admission rejection and in-flight behavior using an immutable source
 revision. This compatibility check does not replace a separate production
 enforcement or release-security review.
+For the in-flight effect outcome matrix, failure behavior, and remaining
+remote-side-effect limitations, see [in-flight external enforcement](docs/INFLIGHT_EXTERNAL_ENFORCEMENT.md).
 
 ## Agent integration
 
