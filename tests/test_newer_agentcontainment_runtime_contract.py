@@ -215,14 +215,16 @@ def test_downstream_commit_fence_rejects_previously_admitted_http_request():
                     raise TimeoutError("test never released the downstream commit")
                 # This is the *trusted server-side* commit fence. It must be
                 # atomic with the protected commit in a real downstream system.
-                with runtime._lock:
-                    allowed = (
-                        runtime.can_execute
-                        and data["epoch"] == runtime.epoch
-                        and data["agent_id"] == runtime.agent_id
-                    )
-                    if allowed:
-                        committed.append(data["value"])
+                # Snapshot is atomic for this deterministic ordering test.
+                # A real service must enforce its own transactional fence.
+                snapshot = runtime.snapshot()
+                allowed = (
+                    snapshot.can_execute
+                    and data["epoch"] == snapshot.epoch
+                    and data["agent_id"] == snapshot.agent_id
+                )
+                if allowed:
+                    committed.append(data["value"])
                 self.send_response(200 if allowed else 409)
                 self.end_headers()
                 self.wfile.write(b"committed" if allowed else b"stale epoch")
