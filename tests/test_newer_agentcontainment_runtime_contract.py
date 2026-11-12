@@ -21,6 +21,7 @@ from agent_containment.models import Action
 from agent_containment.policy import PolicyEngine
 
 
+@pytest.mark.integration
 def test_containment_fences_new_admissions_while_prior_callback_is_blocked():
     engine = build_agentcontainment_engine("inflight-interop")
     signer = Ed25519Signer.generate("inflight-interop")
