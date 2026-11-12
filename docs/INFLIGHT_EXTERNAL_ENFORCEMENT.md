@@ -1,0 +1,81 @@
+# In-flight side effects and external enforcement
+
+**Status:** security contract under review. This document describes the
+currently tested behavior, not a claim of universal cancellation or a
+production service-level objective.
+
+## Trust boundaries
+
+- **Admission fence:** AgentContainment validates the runtime's ACTIVE state,
+  exact execution lease, and epoch while atomically admitting a callback. A
+  subsequent containment transition advances the epoch and denies **new**
+  admissions. An already-admitted callback is not retroactively un-admitted.
+- **Warrant check:** WarrantKit verifies signed Warrant, capability, expiry,
+  policy, revocation, and current runtime epoch before policy evaluation and
+  again in the admitted callback. The newer AgentContainment runtime runs
+  application callbacks **outside** its lifecycle lock. The final check is
+  not an atomic commit with the downstream protected side effect.
+- **External enforcement:** A configured, independently verified enforcer
+  (for example, Linux cgroup-v2 cgroup.kill) can terminate an already
+  running, correctly attached workload. The controller's runtime fence is
+  not itself a process-kill or outbound-request cancellation primitive.
+- **Downstream service:** Operations already accepted by an external
+  service can complete even if the local process is subsequently killed.
+  Only the downstream trust boundary can provide atomic authorization at
+  commit, revocation, idempotent retries, or compensation. Local evidence
+  must not imply that a remote side effect was undone.
+
+## Observable outcome matrix
+
+| Boundary and timing | Expected outcome | Evidence |
+| --- | --- | --- |
+| Attempt new callback after committed runtime fence | Denied by runtime lease and Warrant checks | tests/test_newer_agentcontainment_runtime_contract.py |
+| Callback admitted before fence and blocked | Fence can commit without waiting; callback remains in-flight | tests/test_newer_agentcontainment_runtime_contract.py |
+| Child in dedicated cgroup, pre-fence write already completed | Write remains; no rollback is claimed | tests/integration/test_inflight_cgroup_external_enforcement.py |
+| Child in dedicated cgroup, second write gated until after containment | cgroup.kill terminates child; independently verified empty cgroup and SIGKILL; second write absent | tests/integration/test_inflight_cgroup_external_enforcement.py |
+| External enforcer reports failure while callback is in-flight | Fence remains committed; report is not certified; old callback may continue and complete | tests/test_newer_agentcontainment_runtime_contract.py |
+| Remote request leaves the local host before containment | **Unproven.** May commit after containment, regardless of local process kill | Requires a separately authenticated remote-service test |
+
+The real-kill test runs only under an explicit privileged Linux opt-in and
+checks the actual cgroup identity, kernel occupancy, child exit signal,
+pre-fence effect, and absent pending effect. The test uses a local worker
+process; it does not establish remote-service cancellation, network egress
+policy correctness, or a bound on kill latency in production deployments.
+
+## Interpreting containment results
+
+1. A fenced runtime rejects newly admitted work even if an external enforcer
+   later fails. A stale epoch is not made current by a failed enforcement
+   stage.
+2. A complete / certified report requires the configured external
+   providers to return enforcement and independent verification. A failure
+   must remain visible in the report and never be treated as a successful
+   kill.
+3. An already-admitted Python callback may return **after** the runtime is
+   contained, including with the killed worker's nonzero return code. That
+   return is not a new execution lease or proof that a downstream write
+   succeeded.
+4. Side effects committed before containment remain committed. Evidence
+   should separate admission, fence, enforcement, verification,
+   and the authoritative downstream outcome, when known.
+
+## Requirements before a production compatibility claim
+
+- Keep the older released/pinned runtime behavior and the newer-runtime
+  behavior explicitly separated in tests and release documentation.
+- Pin the exact newer AgentContainment source and validate it with both
+  deterministic concurrency tests and real Linux process-enforcement tests.
+- Verify failure-path handling: stale authority remains denied when the
+  enforcer is unavailable, while any in-flight effect is treated as
+  potentially completed until an authoritative downstream result exists.
+- Specify the downstream authorization model before claiming that an
+  already-admitted remote operation cannot commit after containment. Typical
+  defenses are gateway-held credentials, per-operation epoch fencing at the
+  server, idempotency keys, transaction-scoped authorization and explicit
+  cancellation/compensation. None is automatically provided by a local
+  process kill.
+- Perform a separate review of controller crash/restart during fencing,
+  durable incident reconciliation, and endpoint credential lifetime.
+
+No API should claim that a local GuardedExecutionDenied, an epoch advance,
+or external_verified alone reverses a side effect that already completed.
