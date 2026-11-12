@@ -34,9 +34,10 @@ production service-level objective.
 | Child in dedicated cgroup, pre-fence write already completed | Write remains; no rollback is claimed | tests/integration/test_inflight_cgroup_external_enforcement.py |
 | Child in dedicated cgroup, second write gated until after containment | cgroup.kill terminates child; independently verified empty cgroup and SIGKILL; second write absent | tests/integration/test_inflight_cgroup_external_enforcement.py |
 | External enforcer reports failure while callback is in-flight | Fence remains committed; report is not certified; old callback may continue and complete | tests/test_newer_agentcontainment_runtime_contract.py |
+| HTTP request accepted before fencing, downstream epoch checked after fencing | A localhost server using a trusted in-process runtime snapshot rejects the pending commit with HTTP 409 | tests/test_newer_agentcontainment_runtime_contract.py |
 | Remote request leaves the local host before containment | **Unproven.** May commit after containment, regardless of local process kill | Requires a separately authenticated remote-service test |
 
-The real-kill test runs only under an explicit privileged Linux opt-in and
+The localhost HTTP test demonstrates commit-time authorization ordering with a trusted in-process epoch oracle. It does not prove distributed revocation propagation, atomic server-side transactions, network partition behavior, or protection against an agent holding its own credentials. A real remote service must obtain trusted, fresh epoch state and enforce the authorization check in the same transaction as the protected effect.\n\nThe real-kill test runs only under an explicit privileged Linux opt-in and
 checks the actual cgroup identity, kernel occupancy, child exit signal,
 pre-fence effect, and absent pending effect. The test uses a local worker
 process; it does not establish remote-service cancellation, network egress
