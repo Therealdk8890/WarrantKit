@@ -4,6 +4,7 @@ The platform layer defines policy, execution identity, lifecycle state, structur
 events, and transport-neutral evidence around the AgentContainment engine.
 """
 
+from .guarded_execution import BoundGuardedExecution, GuardedExecutionDenied
 from .engine import (
     Admission,
     admit,
@@ -69,6 +70,8 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "BoundGuardedExecution",
+    "GuardedExecutionDenied",
     "Admission",
     "Event",
     "EventLog",

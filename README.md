@@ -81,6 +81,37 @@ warrantkit demo
 
 Each proof has a narrower claim than a full production deployment. Preserve real-kill artifacts with the exact source revision and host details. The default demo signing key supports integrity checks only; authenticated incident evidence requires an operator-controlled Ed25519 key and a public key provisioned independently of the evidence bundle. See the [real-kill guide](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation) and [trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
+## Public guarded-execution API (unreleased)
+
+The development branch provides `BoundGuardedExecution` for trusted,
+synchronous Python integrations that need one Warrant-aware execution
+boundary without importing private framework-adapter functions. This API
+is **not included in the published 0.1.6 package** until a new release.
+
+```python
+from agentcontain import BoundGuardedExecution
+from agent_containment.models import Action
+
+bound = BoundGuardedExecution(admission, gateway, warrant_verifier=verifier)
+result = bound.execute(
+    Action(agent_id=admission.identity.agent_id, action_id="my-action",
+           operation="write_record", resource="example"),
+    lambda action: perform_authorized_write(action),
+)
+```
+
+The binding captures the accepted admission and checks signed Warrant,
+current runtime epoch, expiry, revocation, subject/policy, and the action's
+**operation capability**, twice: before gateway policy and within the
+controller-owned lease-guarded executor callback. Missing authority,
+gateway denial, and runtime state changes fail closed.
+
+This protects only actions actually routed through the trusted gateway.
+The Python object is **not** a host isolation boundary; the agent must not
+hold alternate credentials or an unrestricted route to protected downstream
+side effects. The API is synchronous only and does not promise to interrupt
+a side effect already in progress.
+
 ## Agent integration
 
 The LangChain adapter protects a tool by admitting an execution under a policy, wrapping the tool with the admission and gateway, and then containing the execution when needed. This abbreviated example shows the shape; see the [complete runnable integration](docs/INTEGRATIONS_AND_PROOFS.md#langchain-integration) for imports, signer setup, and trusted-key configuration.
