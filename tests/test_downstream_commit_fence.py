@@ -104,10 +104,7 @@ def test_concurrent_commit_and_fence_are_serialized(store):
     # The database write and authority check are protected by the same
     # SQLite write transaction, so every outcome has a legal total order.
     for i in range(12):
-        _transition(store, 2 * i + 1, False) if i else None
-        if i:
-            _transition(store, 2 * i + 2, True)
-        epoch = 0 if i == 0 else 2 * i + 2
+        epoch = 2 * i
         request = _op(store, f"parallel-{i}", epoch=epoch)
         with ThreadPoolExecutor(max_workers=2) as pool:
             future_commit = pool.submit(store.commit, request)
