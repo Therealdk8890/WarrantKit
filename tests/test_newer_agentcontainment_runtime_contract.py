@@ -182,3 +182,102 @@ def test_failed_external_enforcer_keeps_runtime_fenced_but_cannot_stop_inflight(
     assert results == ["callback-completed"]
     assert effects == ["already-admitted effect completed after failed enforcement"]
     assert runtime.inflight_executions == 0
+
+
+@pytest.mark.integration
+def test_downstream_commit_fence_rejects_previously_admitted_http_request():
+    """An HTTP server must recheck trusted epoch at COMMIT, not at arrival.
+
+    This deliberately uses an in-process trusted epoch oracle and localhost.
+    It establishes the downstream authorization protocol's ordering, not
+    network partition behavior, production identity, or credential custody.
+    """
+    import json
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from urllib.error import HTTPError
+    from urllib.request import Request, urlopen
+
+    engine = build_agentcontainment_engine("downstream-commit-fence")
+    runtime = engine.controller.runtime
+    original_epoch = runtime.epoch
+    request_received = Event()
+    permit_commit = Event()
+    committed = []
+    outcomes = []
+    failures = []
+
+    class DownstreamHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            try:
+                data = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+                request_received.set()
+                if not permit_commit.wait(timeout=8):
+                    raise TimeoutError("test never released the downstream commit")
+                # This is the *trusted server-side* commit fence. It must be
+                # atomic with the protected commit in a real downstream system.
+                with runtime._lock:
+                    allowed = (
+                        runtime.can_execute
+                        and data["epoch"] == runtime.epoch
+                        and data["agent_id"] == runtime.agent_id
+                    )
+                    if allowed:
+                        committed.append(data["value"])
+                self.send_response(200 if allowed else 409)
+                self.end_headers()
+                self.wfile.write(b"committed" if allowed else b"stale epoch")
+            except BaseException as exc:
+                failures.append(exc)
+                try:
+                    self.send_error(500)
+                except OSError:
+                    pass
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), DownstreamHandler)
+    server_thread = Thread(target=server.serve_forever, daemon=True)
+    server_thread.start()
+    try:
+        def client():
+            request = Request(
+                f"http://127.0.0.1:{server.server_port}/commit",
+                data=json.dumps({
+                    "agent_id": runtime.agent_id,
+                    "epoch": original_epoch,
+                    "value": "delayed-remote-commit",
+                }).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            try:
+                with urlopen(request, timeout=10) as response:
+                    outcomes.append(response.status)
+            except HTTPError as exc:
+                outcomes.append(exc.code)
+            except BaseException as exc:
+                failures.append(exc)
+
+        client_thread = Thread(target=client, daemon=True)
+        client_thread.start()
+        try:
+            assert request_received.wait(timeout=5), "HTTP server did not accept request"
+            assert committed == []
+            # Request arrived while the old epoch was valid. Containment
+            # commits before the server performs its authorization/commit.
+            runtime.halt()
+            assert runtime.epoch == original_epoch + 1
+            assert not runtime.can_execute
+        finally:
+            permit_commit.set()
+            client_thread.join(timeout=5)
+        assert not client_thread.is_alive()
+        assert not failures, failures
+        assert outcomes == [409]
+        assert committed == []
+    finally:
+        permit_commit.set()
+        server.shutdown()
+        server.server_close()
+        server_thread.join(timeout=5)
