@@ -8,6 +8,7 @@ from a different process as a substitute for this transaction.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import hashlib
 import hmac
@@ -70,10 +71,14 @@ class DownstreamCommitFence:
                 PRIMARY KEY(agent_id, operation_id)
             )""")
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
         db = sqlite3.connect(self._db_path, timeout=10, isolation_level=None)
-        db.execute("PRAGMA busy_timeout = 10000")
-        return db
+        try:
+            db.execute("PRAGMA busy_timeout = 10000")
+            yield db
+        finally:
+            db.close()
 
     def sign_transition(self, *, agent_id: str, epoch: int, active: bool) -> str:
         """Controller-side helper; call only where the controller key is trusted."""
