@@ -80,3 +80,34 @@ policy correctness, or a bound on kill latency in production deployments.
 
 No API should claim that a local GuardedExecutionDenied, an epoch advance,
 or external_verified alone reverses a side effect that already completed.
+
+
+## Transactional downstream reference (experimental)
+
+The module agentcontain/downstream_commit_fence.py implements a **single
+SQLite database** reference for protecting a local committed effect. The
+controller authenticates a monotonic epoch transition with a controller-held
+HMAC key. A separately authenticated gateway signs the exact operation
+(agent, epoch, operation ID and payload). The downstream database performs
+both the epoch comparison and effect insertion under one BEGIN IMMEDIATE
+transaction. Idempotent identical retries do not duplicate the effect;
+conflicting retries fail closed.
+
+This reference is not automatically wired to the WarrantKit gateway, its
+production controller, a remote HTTP service, or an external identity
+provider. The two signing helpers are co-located in the reference class for
+test convenience; in a real deployment, private keys must be segregated
+into controller/gateway processes and inaccessible to agents. The example
+does not implement TLS/mTLS, trusted principal provisioning, durable key
+rotation, distributed state replication, or cross-database atomicity.
+
+**Critical operational constraint:** the downstream service must receive
+the authenticated fence transition and durably commit it before claiming
+that downstream writes are fenced. A local runtime epoch increment alone
+does not synchronously update a remote service. An already-accepted remote
+request can commit before the downstream fence transaction wins. If the
+fence transaction wins first, the old-epoch request is rejected. A local
+SQLite transaction provides a total order within one database only.
+
+The reference demonstrates a concrete protocol and tests its behavior; it
+is not a production-ready authenticated remote enforcement system.
