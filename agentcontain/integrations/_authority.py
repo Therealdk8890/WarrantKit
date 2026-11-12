@@ -115,8 +115,10 @@ def verify_current_capability(
 ) -> None:
     """Verify signed authority and capability inside a guarded side-effect callback.
 
-    Call after gateway policy evaluation, under Runtime.execute_if_active's
-    lease fence, in addition to any preflight verification.
+    Call after gateway policy evaluation, within Runtime.execute_if_active's
+    admitted callback, in addition to any preflight verification. In newer
+    AgentContainment implementations the callback does not hold the lifecycle
+    lock; verification does not cancel an already-admitted external effect.
     """
     verify_current_authority(
         admission, gateway, warrant_verifier, expected_snapshot,
