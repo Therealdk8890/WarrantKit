@@ -151,3 +151,33 @@ def test_openai_agents_tool_rejects_execution_if_runtime_epoch_changes_after_war
     with pytest.raises(integration.OpenAIAgentsWarrantError):
         _invoke(protected, {"value": "must-not-run"})
     assert calls == []
+
+
+
+def test_openai_denies_warrant_revoked_after_gateway_policy_begins(monkeypatch):
+    from datetime import datetime, timezone
+    from agentcontain.integrations.openai_agents import (
+        OpenAIAgentsWarrantError, wrap_openai_tool,
+    )
+    calls = []
+    def write_record(value: str) -> str:
+        """Write a test record."""
+        calls.append(value)
+        return "written"
+
+    _, admission, gateway, verifier = _setup("openai-revoke-policy", "write_record")
+    protected = wrap_openai_tool(
+        write_record, admission, gateway, warrant_verifier=verifier
+    )
+    evaluate = gateway.policy.evaluate
+
+    def revoke_during_policy(action):
+        admission.warrant = admission.warrant.revoke(
+            revoked_at=datetime.now(timezone.utc)
+        )
+        return evaluate(action)
+
+    monkeypatch.setattr(gateway.policy, "evaluate", revoke_during_policy)
+    with pytest.raises(OpenAIAgentsWarrantError):
+        _invoke(protected, {"value": "must-not-execute"})
+    assert calls == []

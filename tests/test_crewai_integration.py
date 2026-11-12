@@ -192,3 +192,36 @@ def test_crewai_tool_rejects_signed_warrant_that_exceeds_accepted_policy() -> No
         protected.run(amount=25)
 
     assert tool.calls == []
+
+
+
+def test_crewai_denies_warrant_revoked_during_gateway_policy(monkeypatch):
+    from datetime import datetime, timezone
+    PaymentTool = _integration()
+    from agentcontain.integrations.crewai import CrewAIWarrantError, wrap_crewai_tool
+
+    engine = build_agentcontainment_engine("crewai-revoke-policy")
+    signer = Ed25519Signer.generate("crewai-revoke-policy")
+    admission = admit(
+        Policy("crewai-revoke-policy", capabilities=("payments_refund",)),
+        agent_id="crewai-revoke-policy",
+        engine=engine,
+        runtime_id=engine.runtime_id,
+        warrant_signer=signer,
+    )
+    gateway = ActionGateway(PolicyEngine(), engine.controller)
+    verifier = Ed25519Verifier({signer.key_id: signer.public_key()})
+    tool = PaymentTool()
+    protected = wrap_crewai_tool(tool, admission, gateway, warrant_verifier=verifier)
+    evaluate = gateway.policy.evaluate
+
+    def revoke_during_policy(action):
+        admission.warrant = admission.warrant.revoke(
+            revoked_at=datetime.now(timezone.utc)
+        )
+        return evaluate(action)
+
+    monkeypatch.setattr(gateway.policy, "evaluate", revoke_during_policy)
+    with pytest.raises(CrewAIWarrantError):
+        protected.run(amount=25)
+    assert tool.calls == []

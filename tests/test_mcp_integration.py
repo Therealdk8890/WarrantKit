@@ -110,3 +110,29 @@ def test_mcp_handler_rejects_execution_if_epoch_changes_after_warrant_check(monk
     with pytest.raises(integration.MCPWarrantError):
         protected("must-not-run")
     assert calls == []
+
+
+
+def test_mcp_denies_warrant_revoked_after_gateway_policy_begins(monkeypatch):
+    from datetime import datetime, timezone
+    from agentcontain.integrations.mcp import MCPWarrantError, wrap_mcp_tool
+
+    calls = []
+    def write_record(value: str) -> str:
+        calls.append(value)
+        return "written"
+
+    _, admission, gateway, verifier = _setup("mcp-revoke-policy", "write_record")
+    protected = wrap_mcp_tool(write_record, admission, gateway, warrant_verifier=verifier)
+    evaluate = gateway.policy.evaluate
+
+    def revoke_during_policy(action):
+        admission.warrant = admission.warrant.revoke(
+            revoked_at=datetime.now(timezone.utc)
+        )
+        return evaluate(action)
+
+    monkeypatch.setattr(gateway.policy, "evaluate", revoke_during_policy)
+    with pytest.raises(MCPWarrantError):
+        protected("must-not-execute")
+    assert calls == []
