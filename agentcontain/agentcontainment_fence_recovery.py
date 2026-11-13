@@ -197,3 +197,53 @@ def require_verified_against_agentcontainment_fence(
         return record.containment_epoch
 
     outbox.require_verified_against_authority(agent_id, epoch, read_epoch)
+
+
+# A checkpoint must be retrieved from an independently authenticated,
+# rollback-resistant authority. This module intentionally does not implement
+# a local-file checkpoint store: one would share the registry's rollback risk.
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class TrustedRegistryCheckpoint:
+    """Externally authenticated, freshness-protected per-agent snapshot pin.
+
+    The provider MUST authenticate agent identity, checkpoint provenance and
+    freshness, and enforce monotonic progression across crashes/restores.
+    This value is not a self-authenticating token.
+    """
+    agent_id: str
+    epoch: int
+    fence_sha256: str
+    incident_sha256: str | None
+
+
+def reconcile_with_trusted_checkpoint(
+    *, agent_id: str, fence_path: str | Path, incident_path: str | Path,
+    outbox: DurableTransitionOutbox,
+    sign_transition: Callable[[str, int, bool], TransitionEnvelope],
+    read_trusted_checkpoint: Callable[[str], TrustedRegistryCheckpoint],
+) -> TransitionEnvelope:
+    """Recover only from the exact snapshot pinned by external authority.
+
+    The caller supplies a protected monotonic checkpoint service, not a
+    checkpoint read from the mutable registry/outbox filesystem. A missing,
+    stale, malformed, or mismatched checkpoint fails before enqueue. This
+    adapter cannot establish that the provider is genuinely independent.
+    """
+    checkpoint = read_trusted_checkpoint(agent_id)
+    if (not isinstance(checkpoint, TrustedRegistryCheckpoint)
+            or checkpoint.agent_id != agent_id
+            or type(checkpoint.epoch) is not int or checkpoint.epoch < 1):
+        raise DownstreamDenied("invalid independent registry checkpoint")
+    verifier = pinned_registry_snapshot_verifier(
+        expected_fence_sha256=checkpoint.fence_sha256,
+        expected_incident_sha256=checkpoint.incident_sha256,
+    )
+    return reconcile_authenticated_agentcontainment_registries(
+        agent_id=agent_id, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=sign_transition,
+        verify_registry_snapshot=verifier,
+        minimum_trusted_epoch=checkpoint.epoch,
+    )
