@@ -156,3 +156,30 @@ requires durable retries, endpoint identity authentication, restart-safe
 reconciliation, independent trust-key custody, and coverage of every
 configured downstream enforcement target. A synchronous in-process
 coordinator alone does not provide these guarantees.
+
+
+## Restart-safe downstream transition outbox (experimental)
+
+The `DurableTransitionOutbox` reference persists a controller-signed
+transition envelope to a separate SQLite database before attempting delivery.
+A restart reconstructs pending transitions from the database and retries them
+in epoch order. Only a matching, authenticated downstream receipt is stored as
+acknowledged; verification is repeated when querying persisted receipts.
+The downstream transition endpoint accepts identical epoch transitions
+idempotently, so losing the receipt after remote commit can be recovered by
+retrying the same envelope. Missing acknowledgments remain pending.
+
+**This does not yet solve the crash window between local runtime fencing and
+outbox enqueue.** A controller that crashes after advancing its local epoch
+but before recording the transition must reconstruct the missing transition
+from durable, authoritative runtime incident state. No such reconciliation
+is implemented by this outbox. It also does not automatically register as an
+AgentContainment enforcer or amend its certification semantics.
+
+The outbox SQLite file must itself have durable storage, exclusive controller
+access, correct file permissions, backup/restore procedures, and the same
+retention guarantees as the authority log. A compromised database, stolen
+controller/gateway key, or stale trusted epoch source is outside this
+reference's security guarantees. Multi-target delivery, retry scheduling,
+operator alerts, endpoint identity, and authenticated transport are future
+integration work.
