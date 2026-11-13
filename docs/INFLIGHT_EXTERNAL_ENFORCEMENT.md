@@ -414,3 +414,20 @@ it on a different path or process alone does not change those facts. A real
 provider must place the atomic CAS behind an authenticated independent trust
 boundary and test whole-storage restore and disaster recovery before making
 rollback-resistance claims.
+
+
+### Loopback checkpoint API reference (experimental)
+
+`agentcontain/checkpoint_http_reference.py` provides a loopback-only
+`ThreadingHTTPServer` with a bearer-token gate, authenticated checkpoint
+reads and atomic SQLite-backed CAS updates. The API rejects non-loopback
+binds and weak-length tokens. Its integration tests exercise unauthorized
+reads, missing checkpoints, conflicting writes, epoch gaps, and restart.
+
+This is **not a production authentication or independent-trust boundary**:
+HTTP on loopback is unencrypted, bearer tokens are shared secrets, and the
+server has no TLS, mTLS, credential rotation, separate read/write roles,
+remote authorization, audit trail, or rollback-proof storage. Never expose
+this endpoint through a reverse proxy or public network. Production must
+provide a separately administered and authenticated authority with durable
+monotonic state before using this protocol to justify security claims.
