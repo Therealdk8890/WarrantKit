@@ -172,3 +172,34 @@ def test_deleted_middle_transition_invalidates_later_receipt(components):
     assert not restarted.verified("agent", 2)
     with pytest.raises(DownstreamDenied, match="noncontiguous"):
         restarted.enqueue(transition(fence, 3, False))
+
+
+def test_restored_outbox_cannot_claim_old_epoch_against_newer_authority(components):
+    import shutil
+    fence, endpoint, verifier, outbox, path = components
+    outbox.enqueue(transition(fence, 0, True))
+    assert outbox.deliver_pending("agent", endpoint.apply) == 1
+    snapshot = path.with_suffix(".snapshot")
+    shutil.copy2(path, snapshot)
+    outbox.enqueue(transition(fence, 1, False))
+    assert outbox.deliver_pending("agent", endpoint.apply) == 1
+    # Restoring an older, internally consistent DB is not enough to prove
+    # that the current controller epoch was fenced.
+    restored = DurableTransitionOutbox(snapshot, verifier=verifier)
+    assert restored.verified("agent", 0)
+    with pytest.raises(PendingDownstreamFence, match="independent authority"):
+        restored.require_verified_against_authority("agent", 0, lambda _: 1)
+    with pytest.raises(PendingDownstreamFence):
+        restored.require_verified_against_authority("agent", 1, lambda _: 1)
+
+
+def test_independent_authority_epoch_must_be_valid_and_match(components):
+    fence, endpoint, verifier, outbox, path = components
+    outbox.enqueue(transition(fence, 0, True))
+    outbox.deliver_pending("agent", endpoint.apply)
+    outbox.require_verified_against_authority("agent", 0, lambda _: 0)
+    for bad in (None, True, -1, "0"):
+        with pytest.raises(PendingDownstreamFence, match="invalid"):
+            outbox.require_verified_against_authority("agent", 0, lambda _, b=bad: b)
+    with pytest.raises(PendingDownstreamFence, match="independent authority"):
+        outbox.require_verified_against_authority("agent", 0, lambda _: 1)
