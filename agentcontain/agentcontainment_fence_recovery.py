@@ -304,6 +304,15 @@ class MonotonicCheckpointStore:
         if (not isinstance(previous, TrustedRegistryCheckpoint)
                 or previous.agent_id != proposed.agent_id):
             raise DownstreamDenied("checkpoint identity mismatch")
+        if (type(previous.epoch) is not int or previous.epoch < 0):
+            raise DownstreamDenied("invalid previous checkpoint epoch")
+        try:
+            pinned_registry_snapshot_verifier(
+                expected_fence_sha256=previous.fence_sha256,
+                expected_incident_sha256=previous.incident_sha256,
+            )
+        except ValueError as exc:
+            raise DownstreamDenied("invalid previous checkpoint digest") from exc
         if proposed.epoch == previous.epoch:
             if proposed != previous:
                 raise DownstreamDenied("conflicting same-epoch checkpoint")
