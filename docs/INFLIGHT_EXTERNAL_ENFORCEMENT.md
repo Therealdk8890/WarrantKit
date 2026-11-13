@@ -305,3 +305,14 @@ protect, or advance the checkpoint.** The caller must obtain expected digests
 from a separate authenticated, freshness-protected source; copying hashes from
 the same mutable disk is not security. SHA-256 equality alone does not prevent
 coordinated rollback.
+
+
+### Minimum trusted epoch
+
+The authenticated recovery helper optionally accepts `minimum_trusted_epoch`
+(an integer >= 1). Even a digest-matching snapshot is rejected if its captured
+agent fence epoch is below this minimum. The value must come from a separately
+protected monotonic authority; using a value read from the same registry does
+not prevent rollback. This is a **lower-bound** freshness check, not proof of
+latest state or a durable monotonic counter. Omitting the parameter preserves
+the prior digest-only behavior.
