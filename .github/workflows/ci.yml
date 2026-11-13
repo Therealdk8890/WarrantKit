@@ -125,7 +125,7 @@ jobs:
           PY
 
       - name: Verify cross-repository public guarded execution contract
-        run: python -m pytest -q tests/test_guarded_execution.py tests/test_newer_agentcontainment_runtime_contract.py
+        run: python -m pytest -q tests/test_guarded_execution.py tests/test_newer_agentcontainment_runtime_contract.py tests/test_agentcontainment_fence_recovery.py
 
   newer-agentcontainment-real-kill:
     name: Newer AgentContainment in-flight cgroup real-kill proof
