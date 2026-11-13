@@ -234,3 +234,18 @@ durability, incident ordering across multiple transitions, recovery of
 already-cleared fences, and atomicity between upstream and downstream
 stores are not proven. These limits must be resolved before claiming
 production-grade distributed containment.
+
+
+## Complete epoch history required for verified outbox status
+
+The outbox now refuses to append a transition unless the per-agent history
+starts at epoch 0 and is contiguous through the preceding epoch. A later
+downstream receipt cannot establish verified status unless every preceding
+epoch has a matching authenticated receipt. Deleting an intermediate
+transition or clearing an earlier receipt invalidates later verification.
+
+This is **local consistency checking**, not tamper-proof storage: a privileged
+attacker with database write access could replace or delete entire histories.
+The outbox also does not infer a missing historical epoch from the latest
+runtime fence. A deployment with incomplete authority history must recover
+it from an independently trusted historical source or remain unverified.
