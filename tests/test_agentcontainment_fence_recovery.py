@@ -146,8 +146,8 @@ def test_authenticated_recovery_requires_trusted_verifier_to_approve(env):
     agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
     fences.prepare(agent, 1)
     calls = []
-    def trusted_checkpoint(fence_file, incident_file):
-        calls.append((fence_file, incident_file))
+    def trusted_checkpoint(fence_file, incident_file, fence_bytes, incident_bytes):
+        calls.append((fence_file, incident_file, fence_bytes, incident_bytes))
         return True
     result = reconcile_authenticated_agentcontainment_registries(
         agent_id=agent, fence_path=fence_path, incident_path=incident_path,
@@ -155,5 +155,42 @@ def test_authenticated_recovery_requires_trusted_verifier_to_approve(env):
         verify_registry_snapshot=trusted_checkpoint,
     )
     assert result.epoch == 1 and result.active is False
-    assert calls == [(fence_path, incident_path)]
+    assert len(calls) == 1
+    assert calls[0][:2] == (fence_path, incident_path)
+    assert calls[0][2] == fence_path.read_bytes()
+    assert calls[0][3] is None
     assert not outbox.verified(agent, 1)
+
+
+def test_authenticated_recovery_uses_verified_bytes_after_source_replacement(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    original = fence_path.read_bytes()
+
+    def verify_then_replace(original_fence, original_incident, fence_bytes, incident_bytes):
+        assert fence_bytes == original and incident_bytes is None
+        # Simulate adversarial replacement after verification but before parse.
+        original_fence.write_text('{"records":[]}', encoding="utf-8")
+        return True
+
+    recovered = reconcile_authenticated_agentcontainment_registries(
+        agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=signer,
+        verify_registry_snapshot=verify_then_replace,
+    )
+    assert recovered.epoch == 1 and recovered.active is False
+    assert outbox.pending(agent) == [recovered]
+
+
+def test_authenticated_recovery_rejects_modified_snapshot_bytes(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    trusted_bytes = fence_path.read_bytes()
+    fence_path.write_text('{"records":[]}', encoding="utf-8")
+    with pytest.raises(DownstreamDenied, match="not authenticated"):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            verify_registry_snapshot=lambda _fp, _ip, fb, _ib: fb == trusted_bytes,
+        )
+    assert outbox.pending(agent) == []
