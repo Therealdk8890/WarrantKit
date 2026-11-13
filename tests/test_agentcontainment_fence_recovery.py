@@ -1,8 +1,6 @@
 """Real AgentContainment registry recovery contract (newer source only)."""
 import pytest
 
-IncidentRegistry = pytest.importorskip('agent_containment.incident_state').IncidentRegistry
-RuntimeFenceRegistry = pytest.importorskip('agent_containment.runtime_fence').RuntimeFenceRegistry
 from agentcontain.agentcontainment_fence_recovery import (
     reconcile_agentcontainment_registries,
     require_verified_against_agentcontainment_fence,
@@ -12,6 +10,9 @@ from agentcontain.downstream_outbox import DurableTransitionOutbox, PendingDowns
 from agentcontain.downstream_transition_delivery import (
     DownstreamTransitionEndpoint, TransitionReceiptVerifier, new_transition_envelope,
 )
+
+IncidentRegistry = pytest.importorskip("agent_containment.incident_state").IncidentRegistry
+RuntimeFenceRegistry = pytest.importorskip("agent_containment.runtime_fence").RuntimeFenceRegistry
 
 
 @pytest.fixture
@@ -108,3 +109,20 @@ def test_real_registry_rejects_restored_old_outbox_epoch(env):
     require_verified_against_agentcontainment_fence(
         agent_id=agent, epoch=1, fence_path=fence_path, outbox=outbox,
     )
+
+
+def test_missing_controller_fence_blocks_receipt_verification(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    with pytest.raises(DownstreamDenied, match="unavailable"):
+        require_verified_against_agentcontainment_fence(
+            agent_id=agent, epoch=0, fence_path=fence_path, outbox=outbox,
+        )
+
+
+def test_corrupt_controller_fence_blocks_receipt_verification(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fence_path.write_text("{not-json", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="invalid runtime fence registry"):
+        require_verified_against_agentcontainment_fence(
+            agent_id=agent, epoch=0, fence_path=fence_path, outbox=outbox,
+        )
