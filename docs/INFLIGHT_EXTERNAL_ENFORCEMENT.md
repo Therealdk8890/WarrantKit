@@ -137,3 +137,22 @@ downstream enforcement target has acknowledged the transition. The reference
 uses symmetric test keys and no transport; it is **not** an HTTP security
 service, a production key-management implementation, or distributed
 consensus.
+
+
+## Explicit combined local/downstream evidence (experimental)
+
+The optional `contain_with_downstream_ack` coordinator calls the existing
+WarrantKit containment lifecycle, then requires a valid, authenticated
+downstream receipt for the fenced epoch. It does not mutate or overwrite
+AgentContainment's local containment report. A failed or forged downstream
+receipt raises `DownstreamContainmentUnverified`, preserving the local report
+for incident review while explicitly refusing to claim remote verification.
+
+A local containment report can be complete even when a remote service
+never received the fence transition; the remote database may therefore
+still accept a request under its previously active epoch. The coordinator
+and its tests make this distinction observable. Production integration
+requires durable retries, endpoint identity authentication, restart-safe
+reconciliation, independent trust-key custody, and coverage of every
+configured downstream enforcement target. A synchronous in-process
+coordinator alone does not provide these guarantees.
