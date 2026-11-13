@@ -7,6 +7,8 @@ from agentcontain.agentcontainment_fence_recovery import (
     reconcile_agentcontainment_registries,
     reconcile_authenticated_agentcontainment_registries,
     pinned_registry_snapshot_verifier,
+    TrustedRegistryCheckpoint,
+    reconcile_with_trusted_checkpoint,
     require_verified_against_agentcontainment_fence,
 )
 from agentcontain.downstream_commit_fence import DownstreamCommitFence, DownstreamDenied
@@ -326,4 +328,52 @@ def test_authenticated_recovery_verifier_failure_cannot_enqueue(env):
             outbox=outbox, sign_transition=signer,
             verify_registry_snapshot=unavailable_checkpoint,
         )
+    assert outbox.pending(agent) == []
+
+
+def test_external_checkpoint_pins_recovery_to_exact_registry_snapshot(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    checkpoint = TrustedRegistryCheckpoint(
+        agent_id=agent, epoch=1,
+        fence_sha256=hashlib.sha256(fence_path.read_bytes()).hexdigest(),
+        incident_sha256=None,
+    )
+    result = reconcile_with_trusted_checkpoint(
+        agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=signer,
+        read_trusted_checkpoint=lambda _agent: checkpoint,
+    )
+    assert result.epoch == 1 and result.active is False
+    assert outbox.pending(agent) == [result]
+
+
+@pytest.mark.parametrize("checkpoint", [None, True, 1, "invalid"])
+def test_external_checkpoint_missing_or_invalid_fails_closed(env, checkpoint):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    with pytest.raises(DownstreamDenied, match="invalid independent registry checkpoint"):
+        reconcile_with_trusted_checkpoint(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            read_trusted_checkpoint=lambda _agent: checkpoint,
+        )
+    assert outbox.pending(agent) == []
+
+
+def test_external_checkpoint_rejects_rollback_and_wrong_identity(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    digest = hashlib.sha256(fence_path.read_bytes()).hexdigest()
+    for checkpoint in (
+        TrustedRegistryCheckpoint("another-agent", 1, digest, None),
+        TrustedRegistryCheckpoint(agent, 2, digest, None),
+        TrustedRegistryCheckpoint(agent, 1, "0" * 64, None),
+    ):
+        with pytest.raises((DownstreamDenied, ValueError)):
+            reconcile_with_trusted_checkpoint(
+                agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+                outbox=outbox, sign_transition=signer,
+                read_trusted_checkpoint=lambda _agent, cp=checkpoint: cp,
+            )
     assert outbox.pending(agent) == []
