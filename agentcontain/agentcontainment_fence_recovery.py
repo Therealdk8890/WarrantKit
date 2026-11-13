@@ -267,3 +267,47 @@ def reconcile_with_trusted_checkpoint(
         verify_registry_snapshot=verify_exact_checkpoint,
         minimum_trusted_epoch=checkpoint.epoch,
     )
+
+
+class MonotonicCheckpointStore:
+    """Reference trusted-side checkpoint CAS state machine.
+
+    This is intentionally storage-agnostic: the caller MUST execute read,
+    validation and write atomically in an independently protected durable
+    transaction. An in-process dict or local controller database is NOT a
+    production rollback-resistant checkpoint authority.
+    """
+
+    @staticmethod
+    def validate_advance(
+        previous: TrustedRegistryCheckpoint | None,
+        proposed: TrustedRegistryCheckpoint,
+    ) -> bool:
+        """Return False for an idempotent replay; reject rollback or conflict.
+
+        A provider must commit the accepted proposal durably and atomically
+        with its monotonic compare-and-swap before acknowledging success.
+        """
+        if (not isinstance(proposed, TrustedRegistryCheckpoint)
+                or not isinstance(proposed.agent_id, str) or not proposed.agent_id
+                or type(proposed.epoch) is not int or proposed.epoch < 0):
+            raise DownstreamDenied("invalid checkpoint proposal")
+        # Validate both digests, including optional incident presence.
+        pinned_registry_snapshot_verifier(
+            expected_fence_sha256=proposed.fence_sha256,
+            expected_incident_sha256=proposed.incident_sha256,
+        )
+        if previous is None:
+            if proposed.epoch != 0:
+                raise DownstreamDenied("checkpoint history must begin at epoch zero")
+            return True
+        if (not isinstance(previous, TrustedRegistryCheckpoint)
+                or previous.agent_id != proposed.agent_id):
+            raise DownstreamDenied("checkpoint identity mismatch")
+        if proposed.epoch == previous.epoch:
+            if proposed != previous:
+                raise DownstreamDenied("conflicting same-epoch checkpoint")
+            return False
+        if proposed.epoch != previous.epoch + 1:
+            raise DownstreamDenied("noncontiguous checkpoint epoch")
+        return True
