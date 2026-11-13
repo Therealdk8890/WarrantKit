@@ -1,9 +1,12 @@
 """Real AgentContainment registry recovery contract (newer source only)."""
+import hashlib
+
 import pytest
 
 from agentcontain.agentcontainment_fence_recovery import (
     reconcile_agentcontainment_registries,
     reconcile_authenticated_agentcontainment_registries,
+    pinned_registry_snapshot_verifier,
     require_verified_against_agentcontainment_fence,
 )
 from agentcontain.downstream_commit_fence import DownstreamCommitFence, DownstreamDenied
@@ -194,3 +197,53 @@ def test_authenticated_recovery_rejects_modified_snapshot_bytes(env):
             verify_registry_snapshot=lambda _fp, _ip, fb, _ib: fb == trusted_bytes,
         )
     assert outbox.pending(agent) == []
+
+
+def test_pinned_snapshot_digest_accepts_exact_captured_registry_bytes(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    expected = hashlib.sha256(fence_path.read_bytes()).hexdigest()
+    recovered = reconcile_authenticated_agentcontainment_registries(
+        agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=signer,
+        verify_registry_snapshot=pinned_registry_snapshot_verifier(
+            expected_fence_sha256=expected, expected_incident_sha256=None,
+        ),
+    )
+    assert recovered.epoch == 1 and recovered.active is False
+
+
+def test_pinned_snapshot_digest_rejects_tampering_and_missing_incident(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    expected = hashlib.sha256(fence_path.read_bytes()).hexdigest()
+    verifier = pinned_registry_snapshot_verifier(
+        expected_fence_sha256=expected,
+        expected_incident_sha256=hashlib.sha256(b"expected-incident").hexdigest(),
+    )
+    with pytest.raises(DownstreamDenied, match="not authenticated"):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer, verify_registry_snapshot=verifier,
+        )
+    fence_path.write_bytes(b"tampered")
+    verifier = pinned_registry_snapshot_verifier(
+        expected_fence_sha256=expected, expected_incident_sha256=None,
+    )
+    with pytest.raises(DownstreamDenied, match="not authenticated"):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer, verify_registry_snapshot=verifier,
+        )
+    assert outbox.pending(agent) == []
+
+
+def test_pinned_snapshot_digest_rejects_invalid_checkpoint_digest():
+    with pytest.raises(ValueError, match="fence SHA-256"):
+        pinned_registry_snapshot_verifier(
+            expected_fence_sha256="not-a-digest", expected_incident_sha256=None,
+        )
+    with pytest.raises(ValueError, match="incident SHA-256"):
+        pinned_registry_snapshot_verifier(
+            expected_fence_sha256="0" * 64, expected_incident_sha256="x" * 64,
+        )
