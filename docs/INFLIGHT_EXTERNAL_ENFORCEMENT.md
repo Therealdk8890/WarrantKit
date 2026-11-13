@@ -316,3 +316,44 @@ protected monotonic authority; using a value read from the same registry does
 not prevent rollback. This is a **lower-bound** freshness check, not proof of
 latest state or a durable monotonic counter. Omitting the parameter preserves
 the prior digest-only behavior.
+
+
+## Release-review gate checklist (PR #248)
+
+This checklist applies to the experimental newer-runtime and downstream-fence
+work. A passing CI workflow is necessary but not sufficient for production
+claims. Do not treat this PR as upgrading the released AgentContainment pin.
+
+- [ ] **Scope:** enumerate every protected side-effect route and identify any
+  alternate credentials, unwrapped tools, and external service paths. Explicitly
+  classify paths that remain advisory or unprotected.
+- [ ] **Ordering:** demonstrate the local callback-admission/fence ordering,
+  the real Linux cgroup kill, and the downstream transaction's commit/fence
+  ordering. Record which effects completed before fencing and which were denied.
+- [ ] **Negative enforcement:** prove degraded/failed process termination never
+  yields a complete or certified external-enforcement report. Treat any
+  already-admitted callback outcome as unknown without authoritative evidence.
+- [ ] **Authenticated delivery:** require a trusted downstream identity,
+  separated controller/gateway/receipt keys, authenticated transport, replay
+  policy, and verified receipts for every configured target before reporting
+  remote enforcement. HMAC reference fixtures alone do not satisfy this gate.
+- [ ] **Crash recovery:** prove that an authoritative fence is durably recorded
+  before a crash can erase its transition, or demonstrate recovery from an
+  independently authenticated, freshness-protected checkpoint. Test missing,
+  corrupted, conflicting, truncated, and restored histories.
+- [ ] **Rollback resistance:** test coordinated rollback of the outbox and
+  controller registry. Until a separately protected monotonic anchor exists,
+  document that this attack remains undetectable and prohibit anti-rollback
+  or production distributed-containment claims.
+- [ ] **CI provenance:** attach the exact PR-head SHA, complete required-job
+  conclusions, privileged runner environment, proof artifacts, and any skipped
+  checks. Previous-head passes do not establish current-head readiness.
+- [ ] **Independent review:** obtain an external review of threat boundaries,
+  key custody, receipt semantics, recovery, and failure reporting. Resolve
+  findings before changing draft status or claiming release readiness.
+
+**Permitted claim before these gates pass:** an experimental, single-database
+commit-time fencing reference and a separately tested Linux process-enforcement
+proof, each within its documented trust assumptions. **Not permitted:**
+universal cancellation of in-flight effects, authenticated distributed
+containment, rollback-proof recovery, or a production release guarantee.
