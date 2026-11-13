@@ -208,3 +208,29 @@ Repeated reconstruction of the same epoch must reuse the existing stored
 envelope; generating a different request ID for the same epoch is rejected.
 Production recovery must scan all unresolved incidents, retain their
 authenticated ordering, and reconcile any missing intermediate epochs.
+
+
+## Actual AgentContainment durable-registry adapter (newer runtime only)
+
+`agentcontainment_fence_recovery.py` now reads the newer
+AgentContainment `RuntimeFenceRegistry` and `IncidentRegistry` from
+controller-owned persisted files, rather than relying only on an abstract
+incident record. A durable runtime fence is prepared before containment;
+it remains useful even if the incident record could not be written.
+An existing incident must agree on the containment epoch and must not
+already be recovered. The adapter reconstructs a **pending** downstream
+transition and still requires an independently authenticated receipt.
+
+The dedicated newer-runtime CI job exercises actual persisted registry
+files, including missing incidents, conflicting recovery state, mismatched
+epochs, and missing or malformed fences. The pinned production runtime
+submodule remains unchanged.
+
+The registries use atomic file replacement and file fsync, but **do not
+cryptographically authenticate their JSON content**. This adapter assumes
+controller-exclusive filesystem custody; it is not a defense against
+tampering by a privileged host attacker. Directory fsync/power-loss
+durability, incident ordering across multiple transitions, recovery of
+already-cleared fences, and atomicity between upstream and downstream
+stores are not proven. These limits must be resolved before claiming
+production-grade distributed containment.
