@@ -12,4 +12,6 @@ The converter currently rejects non-empty external constraints because their sem
 
 This is an integration contract, not a claim that WarrantKit currently provides a generic external-issuer signature verifier. The current `ExternalAuthorizationDecision` dataclass is a data model, not proof that a verifier ran. For requirements a future provider adapter must satisfy—including trust anchors, audience and subject binding, replay protection, exact-payload binding, and negative tests—see [External Authorization Provider Contract](EXTERNAL_AUTHORIZATION_PROVIDER_CONTRACT.md).
 
+An **experimental, opt-in Ed25519 raw-JSON profile** is now available at [Signed External Authorization Profile](SIGNED_EXTERNAL_AUTHORIZATION_PROFILE.md). This signed path verifies exact decision bytes, independently pinned issuer key and audience, agent/execution identity, and a durable local replay record before calling the existing converter. It is not a general IdP protocol or a production-certified trust boundary; the original `import_authorization` API remains structural-only.
+
 See [issue #207](https://github.com/Therealdk8890/WarrantKit/issues/207) for implementation tracking.

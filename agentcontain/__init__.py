@@ -22,6 +22,7 @@ from .engine import (
 from .events import Event, EventLog
 from .evidence import EvidenceEnvelope, canonical_json
 from .external_authorization import ExternalAuthorizationDecision, import_authorization
+from .signed_external_authorization import (ExternalDecisionAuthenticationError, SQLiteDecisionReplayStore, import_signed_authorization)
 from .external_evidence import ExternalEvidenceReference, digest_artifact, verify_artifact_digest
 from .external_handoff import CorrelationState, ExternalEvidenceHandoff, HandoffCorrelation, correlate_handoff
 from .verification_result import VerificationResult, VerificationStatus, compose_verification
@@ -80,6 +81,9 @@ __all__ = [
     "EvidenceEnvelope",
     "ExternalAuthorizationDecision",
     "import_authorization",
+    "ExternalDecisionAuthenticationError",
+    "SQLiteDecisionReplayStore",
+    "import_signed_authorization",
     "ExternalEvidenceReference",
     "digest_artifact",
     "verify_artifact_digest",
