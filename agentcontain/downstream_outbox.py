@@ -84,12 +84,12 @@ class DurableTransitionOutbox:
                     # Never fabricate continuity after a restart or restore.
                     # A missing earlier epoch is a reconciliation failure, not
                     # permission to skip directly to a later authority state.
-                    last = db.execute(
-                        "SELECT MAX(epoch) FROM transitions WHERE agent_id=?",
+                    last, count = db.execute(
+                        "SELECT MAX(epoch), COUNT(*) FROM transitions WHERE agent_id=?",
                         (envelope.agent_id,),
-                    ).fetchone()[0]
+                    ).fetchone()
                     expected = 0 if last is None else last + 1
-                    if envelope.epoch != expected:
+                    if count != expected or envelope.epoch != expected:
                         raise DownstreamDenied(
                             f"noncontiguous outbox epoch: expected {expected}, got {envelope.epoch}"
                         )
