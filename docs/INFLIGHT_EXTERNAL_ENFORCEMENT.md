@@ -111,3 +111,29 @@ SQLite transaction provides a total order within one database only.
 
 The reference demonstrates a concrete protocol and tests its behavior; it
 is not a production-ready authenticated remote enforcement system.
+
+
+## Authenticated downstream transition acknowledgment (experimental)
+
+The transport-neutral module `agentcontain/downstream_transition_delivery.py`
+adds a controller-authenticated transition envelope, a downstream endpoint
+that commits the signed transition to the same SQLite authority table used
+by protected effects, and a distinct downstream-authenticated receipt.
+The controller-side verifier requires the receipt to match the exact agent,
+epoch, active state, and request identifier. Missing, forged, stale, or
+mismatched acknowledgments do not establish verified downstream enforcement.
+
+The downstream endpoint issues its receipt **after** the database transition
+returns successfully. An identical transition may be retried, with a new
+request ID, if an acknowledgment is lost. An acknowledgment confirms only
+the downstream database's committed transition, not the state of other
+replicas or services.
+
+The reference is intentionally not wired into the production controller's
+`certified` reporting path. That integration requires an independently
+authenticated channel, secret custody separated from the agent, a durable
+outbox/retry policy, explicit error states, and evidence that each configured
+downstream enforcement target has acknowledged the transition. The reference
+uses symmetric test keys and no transport; it is **not** an HTTP security
+service, a production key-management implementation, or distributed
+consensus.
