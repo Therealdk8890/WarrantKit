@@ -183,3 +183,28 @@ controller/gateway key, or stale trusted epoch source is outside this
 reference's security guarantees. Multi-target delivery, retry scheduling,
 operator alerts, endpoint identity, and authenticated transport are future
 integration work.
+
+
+## Reconstructing a missing fence after controller restart (experimental)
+
+`downstream_reconciliation.py` provides a fail-closed recovery adapter
+for the window in which local containment advanced the epoch but the
+controller crashed before recording the downstream transition. A trusted
+reader supplies a durable incident record with the agent, fenced epoch,
+non-executable state, and record identifier. An independently supplied
+authenticator must validate that record. Only then can a controller-held
+signer reconstruct a pending downstream transition in the outbox.
+
+**This is a protocol seam, not a verified AgentContainment incident-store
+integration.** The caller must implement a reader and authenticator against
+the actual durable, controller-owned incident log. The reference does not
+establish which AgentContainment log format is authoritative, authenticate
+that log itself, or prove it was flushed before the controller crash.
+The reconstructed transition is pending until a matching downstream receipt
+has been authenticated and durably persisted. Remote effects may still
+commit before the downstream fence is delivered.
+
+Repeated reconstruction of the same epoch must reuse the existing stored
+envelope; generating a different request ID for the same epoch is rejected.
+Production recovery must scan all unresolved incidents, retain their
+authenticated ordering, and reconcile any missing intermediate epochs.
