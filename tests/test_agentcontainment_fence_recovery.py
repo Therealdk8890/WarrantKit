@@ -247,3 +247,48 @@ def test_pinned_snapshot_digest_rejects_invalid_checkpoint_digest():
         pinned_registry_snapshot_verifier(
             expected_fence_sha256="0" * 64, expected_incident_sha256="x" * 64,
         )
+
+
+def test_authenticated_recovery_rejects_stale_epoch_despite_matching_digest(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    verifier = pinned_registry_snapshot_verifier(
+        expected_fence_sha256=hashlib.sha256(fence_path.read_bytes()).hexdigest(),
+        expected_incident_sha256=None,
+    )
+    with pytest.raises(DownstreamDenied, match="below trusted minimum"):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            verify_registry_snapshot=verifier, minimum_trusted_epoch=2,
+        )
+    assert outbox.pending(agent) == []
+
+
+def test_authenticated_recovery_accepts_matching_minimum_epoch(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    verifier = pinned_registry_snapshot_verifier(
+        expected_fence_sha256=hashlib.sha256(fence_path.read_bytes()).hexdigest(),
+        expected_incident_sha256=None,
+    )
+    result = reconcile_authenticated_agentcontainment_registries(
+        agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=signer,
+        verify_registry_snapshot=verifier, minimum_trusted_epoch=1,
+    )
+    assert result.epoch == 1
+
+
+@pytest.mark.parametrize("invalid", [True, 0, -1, "1", 1.0])
+def test_authenticated_recovery_rejects_invalid_minimum_epoch(env, invalid):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    with pytest.raises(DownstreamDenied, match="invalid trusted minimum"):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            verify_registry_snapshot=lambda *_: True,
+            minimum_trusted_epoch=invalid,
+        )
+    assert outbox.pending(agent) == []
