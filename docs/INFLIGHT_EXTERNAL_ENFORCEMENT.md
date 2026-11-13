@@ -269,3 +269,23 @@ matching old states, this check alone cannot detect the rollback. A
 production deployment needs a separately protected monotonic epoch or
 signed external checkpoint and a clear recovery policy for missing
 fences and restored backups.
+
+
+## Optional external registry-authentication gate
+
+`reconcile_authenticated_agentcontainment_registries` requires an explicit
+`verify_registry_snapshot(fence_path, incident_path)` callback that returns
+the literal boolean `True` before rebuilding a pending downstream fence.
+False, absent, or non-boolean trust decisions fail closed. The callback is
+an integration boundary, **not** a supplied cryptographic verifier: a
+production caller must bind the file identities and exact contents to an
+independently protected checkpoint. The unverified registry recovery
+helper remains a separate compatibility/reference path and must not be
+presented as cryptographically authenticated.
+
+**Remaining TOCTOU limitation:** this reference checks file paths and then
+reopens them during reconciliation. An attacker able to replace files
+between verification and reading can defeat the trust decision. A production
+implementation must verify and parse the same immutable bytes or use an
+equivalent race-resistant snapshot before signing. The tests demonstrate
+the fail-closed callback decision, not end-to-end tamper resistance.
