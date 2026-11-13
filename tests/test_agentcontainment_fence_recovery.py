@@ -463,3 +463,16 @@ def test_monotonic_checkpoint_cas_rejects_invalid_epoch_types():
             MonotonicCheckpointStore.validate_advance(
                 None, TrustedRegistryCheckpoint("agent", epoch, "a" * 64, None)
             )
+
+
+def test_monotonic_checkpoint_cas_rejects_corrupt_previous_state():
+    proposal = TrustedRegistryCheckpoint("agent", 1, "b" * 64, None)
+    corrupt_previous = (
+        TrustedRegistryCheckpoint("agent", True, "a" * 64, None),
+        TrustedRegistryCheckpoint("agent", -1, "a" * 64, None),
+        TrustedRegistryCheckpoint("agent", 0, "bad-digest", None),
+        TrustedRegistryCheckpoint("agent", 0, "a" * 64, "bad-digest"),
+    )
+    for previous in corrupt_previous:
+        with pytest.raises(DownstreamDenied):
+            MonotonicCheckpointStore.validate_advance(previous, proposal)
