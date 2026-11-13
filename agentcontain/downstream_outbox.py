@@ -103,10 +103,18 @@ class DurableTransitionOutbox:
     def verified(self, agent_id: str, epoch: int) -> bool:
         with self._db() as db:
             row = db.execute(
-                "SELECT receipt_json FROM transitions WHERE agent_id=? AND epoch=?",
+                "SELECT envelope_json, receipt_json FROM transitions WHERE agent_id=? AND epoch=?",
                 (agent_id, epoch),
             ).fetchone()
-        return row is not None and row[0] is not None
+        if row is None or row[1] is None:
+            return False
+        try:
+            self._verifier.verify(
+                self._parse_envelope(row[0]), self._parse_receipt(row[1])
+            )
+        except (DownstreamDenied, ValueError, TypeError, KeyError, json.JSONDecodeError):
+            return False
+        return True
 
     def deliver_pending(
         self, agent_id: str, send: Callable[[TransitionEnvelope], TransitionReceipt],
