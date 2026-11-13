@@ -65,3 +65,28 @@ def reconcile_agentcontainment_registries(
         verify_authoritative_record=lambda candidate: candidate == authoritative,
         sign_transition=sign_transition,
     )
+
+
+def require_verified_against_agentcontainment_fence(
+    *, agent_id: str, epoch: int, fence_path: str | Path,
+    outbox: DurableTransitionOutbox,
+) -> None:
+    """Cross-check downstream receipt against actual persisted runtime fence.
+
+    A missing or malformed controller-owned fence fails closed. This is an
+    independent-file rollback check, not cryptographic registry attestation.
+    """
+    from agent_containment.runtime_fence import RuntimeFenceRegistry
+
+    fence_file = Path(fence_path)
+    if not fence_file.is_file():
+        raise DownstreamDenied("durable runtime fence registry is unavailable")
+
+    def read_epoch(requested_agent: str) -> int:
+        registry = RuntimeFenceRegistry(fence_file)
+        record = registry.get(requested_agent)
+        if record is None or type(record.containment_epoch) is not int:
+            raise DownstreamDenied("independent runtime fence is missing or invalid")
+        return record.containment_epoch
+
+    outbox.require_verified_against_authority(agent_id, epoch, read_epoch)
