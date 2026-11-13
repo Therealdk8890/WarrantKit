@@ -357,3 +357,42 @@ commit-time fencing reference and a separately tested Linux process-enforcement
 proof, each within its documented trust assumptions. **Not permitted:**
 universal cancellation of in-flight effects, authenticated distributed
 containment, rollback-proof recovery, or a production release guarantee.
+
+
+## External monotonic checkpoint integration contract (not implemented)
+
+The optional `reconcile_with_trusted_checkpoint` adapter accepts a
+`TrustedRegistryCheckpoint` supplied by a caller-controlled reader. Its
+`agent_id`, `epoch`, `fence_sha256`, and optional `incident_sha256` must
+come from a separate authenticated authority. The adapter checks exact
+captured-byte digests and requires the registry epoch to **equal** the trusted
+epoch before it enqueues a pending fence. A missing checkpoint, wrong identity,
+stale registry, changed incident presence, or digest mismatch cannot authorize
+recovery. Checkpoint retrieval errors propagate and do not enqueue a transition.
+
+A production provider must independently enforce all of the following:
+
+1. Authenticate the caller and bind checkpoint records to a stable agent and
+   deployment identity. Protect checkpoint signing/verification keys from the
+   agent, controller-owned registry directory, and outbox database.
+2. Advance each agent's monotonic epoch with durable compare-and-swap semantics.
+   Reject lower-epoch writes and conflicting same-epoch digests. Define whether
+   an unchanged same-epoch record may be read or replayed idempotently.
+3. Make checkpoint durability and ordering explicit relative to local
+   containment, registry persistence, and downstream transition enqueue.
+   If the controller crashes between these steps, recovery must fail closed
+   until a trusted operator or protocol can reconcile the discrepancy.
+4. Resist coordinated rollback of the controller registry, outbox, and local
+   backups. A second file on the same host, a digest in the same directory,
+   or a signing key available to a compromised controller is insufficient.
+5. Specify availability and recovery behavior: unavailable or ambiguous
+   checkpoints deny new authority and cannot establish verified downstream
+   enforcement. Log independent checkpoint identifiers and verification
+   evidence without exposing secret keys.
+
+**Security limit:** This PR supplies an adapter and negative tests, **not** a
+checkpoint service, hardware monotonic counter, remote KMS policy, quorum, or
+attested durable log. Even a trusted checkpoint cannot retract an effect
+committed before the downstream fence transaction. A green test run proves
+only the tested integration contract, not provider independence or production
+rollback resistance.
