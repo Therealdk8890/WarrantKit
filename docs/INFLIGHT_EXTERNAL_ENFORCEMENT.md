@@ -249,3 +249,23 @@ attacker with database write access could replace or delete entire histories.
 The outbox also does not infer a missing historical epoch from the latest
 runtime fence. A deployment with incomplete authority history must recover
 it from an independently trusted historical source or remain unverified.
+
+
+## Independent epoch cross-check for restored outbox databases
+
+`require_verified_against_authority` compares a requested downstream
+epoch against a separate, caller-trusted authority epoch before accepting
+an authenticated outbox receipt. The newer-runtime adapter
+`require_verified_against_agentcontainment_fence` reads that epoch from
+AgentContainment's persisted `RuntimeFenceRegistry`. A restored old
+outbox can retain valid historical receipts, but cannot use them to claim
+the current epoch is verified while the separate controller fence has
+advanced.
+
+**This is not a cryptographic rollback-proof anchor.** The independent
+authority must be trustworthy and must not itself be rolled back, cleared,
+or replaced. If both the outbox and the fence registry are restored to
+matching old states, this check alone cannot detect the rollback. A
+production deployment needs a separately protected monotonic epoch or
+signed external checkpoint and a clear recovery policy for missing
+fences and restored backups.
