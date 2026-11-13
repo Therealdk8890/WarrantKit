@@ -3,6 +3,7 @@ import pytest
 
 from agentcontain.agentcontainment_fence_recovery import (
     reconcile_agentcontainment_registries,
+    reconcile_authenticated_agentcontainment_registries,
     require_verified_against_agentcontainment_fence,
 )
 from agentcontain.downstream_commit_fence import DownstreamCommitFence, DownstreamDenied
@@ -126,3 +127,33 @@ def test_corrupt_controller_fence_blocks_receipt_verification(env):
         require_verified_against_agentcontainment_fence(
             agent_id=agent, epoch=0, fence_path=fence_path, outbox=outbox,
         )
+
+
+def test_authenticated_recovery_rejects_missing_trust_decision(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    for decision in (False, None, 1, "yes"):
+        with pytest.raises(DownstreamDenied, match="not authenticated"):
+            reconcile_authenticated_agentcontainment_registries(
+                agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+                outbox=outbox, sign_transition=signer,
+                verify_registry_snapshot=lambda *_args, d=decision: d,
+            )
+    assert outbox.pending(agent) == []
+
+
+def test_authenticated_recovery_requires_trusted_verifier_to_approve(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    calls = []
+    def trusted_checkpoint(fence_file, incident_file):
+        calls.append((fence_file, incident_file))
+        return True
+    result = reconcile_authenticated_agentcontainment_registries(
+        agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=signer,
+        verify_registry_snapshot=trusted_checkpoint,
+    )
+    assert result.epoch == 1 and result.active is False
+    assert calls == [(fence_path, incident_path)]
+    assert not outbox.verified(agent, 1)
