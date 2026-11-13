@@ -110,3 +110,20 @@ def test_delivery_order_and_stop_on_first_failure(components):
     assert attempted == [0]
     assert [item.epoch for item in outbox.pending("agent")] == [0, 1]
     assert outbox.deliver_pending("agent", endpoint.apply) == 2
+
+
+def test_tampered_persisted_receipt_does_not_count_as_verified(components):
+    import sqlite3
+    fence, endpoint, verifier, outbox, path = components
+    outbox.enqueue(transition(fence, 0, True))
+    assert outbox.deliver_pending("agent", endpoint.apply) == 1
+    outbox.require_verified("agent", 0)
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "UPDATE transitions SET receipt_json=? WHERE agent_id=? AND epoch=?",
+            ('{"signature":"forged"}', "agent", 0),
+        )
+    restarted = DurableTransitionOutbox(path, verifier=verifier)
+    assert not restarted.verified("agent", 0)
+    with pytest.raises(PendingDownstreamFence):
+        restarted.require_verified("agent", 0)
