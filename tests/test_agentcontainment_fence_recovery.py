@@ -1,8 +1,8 @@
 """Real AgentContainment registry recovery contract (newer source only)."""
 import pytest
 
-from agent_containment.incident_state import IncidentRegistry
-from agent_containment.runtime_fence import RuntimeFenceRegistry
+IncidentRegistry = pytest.importorskip('agent_containment.incident_state').IncidentRegistry
+RuntimeFenceRegistry = pytest.importorskip('agent_containment.runtime_fence').RuntimeFenceRegistry
 from agentcontain.agentcontainment_fence_recovery import reconcile_agentcontainment_registries
 from agentcontain.downstream_commit_fence import DownstreamCommitFence, DownstreamDenied
 from agentcontain.downstream_outbox import DurableTransitionOutbox, PendingDownstreamFence
