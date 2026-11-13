@@ -3,7 +3,10 @@ import pytest
 
 IncidentRegistry = pytest.importorskip('agent_containment.incident_state').IncidentRegistry
 RuntimeFenceRegistry = pytest.importorskip('agent_containment.runtime_fence').RuntimeFenceRegistry
-from agentcontain.agentcontainment_fence_recovery import (\n    reconcile_agentcontainment_registries,\n    require_verified_against_agentcontainment_fence,\n)
+from agentcontain.agentcontainment_fence_recovery import (
+    reconcile_agentcontainment_registries,
+    require_verified_against_agentcontainment_fence,
+)
 from agentcontain.downstream_commit_fence import DownstreamCommitFence, DownstreamDenied
 from agentcontain.downstream_outbox import DurableTransitionOutbox, PendingDownstreamFence
 from agentcontain.downstream_transition_delivery import (
