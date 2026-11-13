@@ -9,9 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Callable
 
-from agent_containment.incident_state import IncidentRegistry, IncidentState
-from agent_containment.runtime_fence import RuntimeFenceRegistry
-
 from .downstream_commit_fence import DownstreamDenied
 from .downstream_outbox import DurableTransitionOutbox
 from .downstream_reconciliation import DurableFenceRecord, reconcile_missing_fence
@@ -32,6 +29,11 @@ def reconcile_agentcontainment_registries(
 
     This does not authenticate arbitrary on-disk JSON against tampering.
     """
+    # Imported lazily: the pinned production AgentContainment submodule may
+    # predate the newer durable fence/incident registry APIs.
+    from agent_containment.incident_state import IncidentRegistry, IncidentState
+    from agent_containment.runtime_fence import RuntimeFenceRegistry
+
     fence_file = Path(fence_path)
     incident_file = Path(incident_path)
     if not fence_file.is_file():
