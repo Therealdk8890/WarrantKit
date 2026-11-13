@@ -116,6 +116,7 @@ def reconcile_authenticated_agentcontainment_registries(
     outbox: DurableTransitionOutbox,
     sign_transition: Callable[[str, int, bool], TransitionEnvelope],
     verify_registry_snapshot: Callable[[Path, Path, bytes, bytes | None], bool],
+    minimum_trusted_epoch: int | None = None,
 ) -> TransitionEnvelope:
     """Authenticate captured bytes, then parse exactly those bytes.
 
@@ -134,6 +135,28 @@ def reconcile_authenticated_agentcontainment_registries(
         fence_file, incident_file, fence_bytes, incident_bytes
     ) is not True:
         raise DownstreamDenied("controller registry snapshot not authenticated")
+
+    if minimum_trusted_epoch is not None:
+        if type(minimum_trusted_epoch) is not int or minimum_trusted_epoch < 1:
+            raise DownstreamDenied("invalid trusted minimum containment epoch")
+        # Read the captured snapshot, not the mutable original. The registry
+        # parser below will validate its shape before any outbox enqueue.
+        import json
+        try:
+            snapshot = json.loads(fence_bytes)
+            records = snapshot["records"]
+            if not isinstance(records, list):
+                raise ValueError("invalid records")
+            matching = [
+                record["containment_epoch"] for record in records
+                if isinstance(record, dict) and record.get("agent_id") == agent_id
+            ]
+            if len(matching) != 1 or type(matching[0]) is not int:
+                raise ValueError("invalid agent epoch")
+        except (ValueError, TypeError, KeyError, IndexError):
+            raise DownstreamDenied("invalid captured controller fence epoch") from None
+        if matching[0] < minimum_trusted_epoch:
+            raise DownstreamDenied("controller fence epoch below trusted minimum")
 
     # The registry parsers only accept paths. Feed them private, immutable
     # captured copies rather than reopening the original mutable paths.
