@@ -67,6 +67,27 @@ def reconcile_agentcontainment_registries(
     )
 
 
+def reconcile_authenticated_agentcontainment_registries(
+    *, agent_id: str, fence_path: str | Path, incident_path: str | Path,
+    outbox: DurableTransitionOutbox,
+    sign_transition: Callable[[str, int, bool], TransitionEnvelope],
+    verify_registry_snapshot: Callable[[Path, Path], bool],
+) -> TransitionEnvelope:
+    """Require an external trust decision before using registry state.
+
+    The verifier must independently authenticate BOTH file identities and
+    contents against a trusted checkpoint or equivalent protected source.
+    It must not simply parse these files and compare them to themselves.
+    This is a reference boundary, not a built-in signature implementation.
+    """
+    if verify_registry_snapshot(Path(fence_path), Path(incident_path)) is not True:
+        raise DownstreamDenied("controller registry snapshot not authenticated")
+    return reconcile_agentcontainment_registries(
+        agent_id=agent_id, fence_path=fence_path, incident_path=incident_path,
+        outbox=outbox, sign_transition=sign_transition,
+    )
+
+
 def require_verified_against_agentcontainment_fence(
     *, agent_id: str, epoch: int, fence_path: str | Path,
     outbox: DurableTransitionOutbox,
