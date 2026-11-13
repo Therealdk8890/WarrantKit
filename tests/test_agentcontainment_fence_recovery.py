@@ -3,7 +3,7 @@ import pytest
 
 IncidentRegistry = pytest.importorskip('agent_containment.incident_state').IncidentRegistry
 RuntimeFenceRegistry = pytest.importorskip('agent_containment.runtime_fence').RuntimeFenceRegistry
-from agentcontain.agentcontainment_fence_recovery import reconcile_agentcontainment_registries
+from agentcontain.agentcontainment_fence_recovery import (\n    reconcile_agentcontainment_registries,\n    require_verified_against_agentcontainment_fence,\n)
 from agentcontain.downstream_commit_fence import DownstreamCommitFence, DownstreamDenied
 from agentcontain.downstream_outbox import DurableTransitionOutbox, PendingDownstreamFence
 from agentcontain.downstream_transition_delivery import (
@@ -91,3 +91,17 @@ def test_mismatched_incident_epoch_fails_closed(env):
     with pytest.raises(DownstreamDenied, match="conflicts"):
         recover(env)
     assert outbox.pending(agent) == []
+
+
+def test_real_registry_rejects_restored_old_outbox_epoch(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    with pytest.raises(PendingDownstreamFence, match="independent authority"):
+        require_verified_against_agentcontainment_fence(
+            agent_id=agent, epoch=0, fence_path=fence_path, outbox=outbox,
+        )
+    recover(env)
+    outbox.deliver_pending(agent, endpoint.apply)
+    require_verified_against_agentcontainment_fence(
+        agent_id=agent, epoch=1, fence_path=fence_path, outbox=outbox,
+    )
