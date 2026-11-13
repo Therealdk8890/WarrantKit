@@ -8,6 +8,7 @@ from agentcontain.agentcontainment_fence_recovery import (
     reconcile_authenticated_agentcontainment_registries,
     pinned_registry_snapshot_verifier,
     TrustedRegistryCheckpoint,
+    MonotonicCheckpointStore,
     reconcile_with_trusted_checkpoint,
     require_verified_against_agentcontainment_fence,
 )
@@ -434,3 +435,31 @@ def test_external_checkpoint_rejects_incident_presence_change(env):
             read_trusted_checkpoint=lambda _agent: checkpoint,
         )
     assert outbox.pending(agent) == []
+
+
+def test_monotonic_checkpoint_cas_rejects_rollback_conflicts_and_gaps():
+    digest = "a" * 64
+    first = TrustedRegistryCheckpoint("agent", 0, digest, None)
+    next_epoch = TrustedRegistryCheckpoint("agent", 1, "b" * 64, None)
+    assert MonotonicCheckpointStore.validate_advance(None, first)
+    assert not MonotonicCheckpointStore.validate_advance(first, first)
+    assert MonotonicCheckpointStore.validate_advance(first, next_epoch)
+    invalid = (
+        TrustedRegistryCheckpoint("agent", 0, "c" * 64, None),
+        TrustedRegistryCheckpoint("agent", 2, "c" * 64, None),
+        TrustedRegistryCheckpoint("other", 1, "c" * 64, None),
+        TrustedRegistryCheckpoint("agent", 1, "not-a-digest", None),
+    )
+    for proposal in invalid:
+        with pytest.raises((DownstreamDenied, ValueError)):
+            MonotonicCheckpointStore.validate_advance(first, proposal)
+    with pytest.raises(DownstreamDenied, match="begin at epoch zero"):
+        MonotonicCheckpointStore.validate_advance(None, next_epoch)
+
+
+def test_monotonic_checkpoint_cas_rejects_invalid_epoch_types():
+    for epoch in (True, -1, "0", 1.0):
+        with pytest.raises(DownstreamDenied, match="invalid checkpoint proposal"):
+            MonotonicCheckpointStore.validate_advance(
+                None, TrustedRegistryCheckpoint("agent", epoch, "a" * 64, None)
+            )
