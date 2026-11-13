@@ -241,9 +241,29 @@ def reconcile_with_trusted_checkpoint(
         expected_fence_sha256=checkpoint.fence_sha256,
         expected_incident_sha256=checkpoint.incident_sha256,
     )
+    def verify_exact_checkpoint(
+        original_fence: Path, original_incident: Path,
+        fence_bytes: bytes, incident_bytes: bytes | None,
+    ) -> bool:
+        import json
+        if not verifier(original_fence, original_incident, fence_bytes, incident_bytes):
+            return False
+        try:
+            snapshot = json.loads(fence_bytes)
+            records = snapshot["records"]
+            if not isinstance(records, list):
+                return False
+            matching = [record for record in records if isinstance(record, dict)
+                        and record.get("agent_id") == agent_id]
+            return (len(matching) == 1
+                    and type(matching[0].get("containment_epoch")) is int
+                    and matching[0]["containment_epoch"] == checkpoint.epoch)
+        except (ValueError, TypeError, KeyError):
+            return False
+
     return reconcile_authenticated_agentcontainment_registries(
         agent_id=agent_id, fence_path=fence_path, incident_path=incident_path,
         outbox=outbox, sign_transition=sign_transition,
-        verify_registry_snapshot=verifier,
+        verify_registry_snapshot=verify_exact_checkpoint,
         minimum_trusted_epoch=checkpoint.epoch,
     )
