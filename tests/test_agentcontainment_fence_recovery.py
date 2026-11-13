@@ -292,3 +292,38 @@ def test_authenticated_recovery_rejects_invalid_minimum_epoch(env, invalid):
             minimum_trusted_epoch=invalid,
         )
     assert outbox.pending(agent) == []
+
+
+def test_authenticated_recovery_rejects_checkpointed_malformed_registry(env):
+    """Matching a trusted digest does not make malformed authority executable."""
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    malformed = b'{"records": "not-a-list"}'
+    fence_path.write_bytes(malformed)
+    verifier = pinned_registry_snapshot_verifier(
+        expected_fence_sha256=hashlib.sha256(malformed).hexdigest(),
+        expected_incident_sha256=None,
+    )
+    with pytest.raises((DownstreamDenied, RuntimeError, ValueError, TypeError)):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            verify_registry_snapshot=verifier,
+        )
+    assert outbox.pending(agent) == []
+
+
+def test_authenticated_recovery_verifier_failure_cannot_enqueue(env):
+    """Checkpoint backend outages must never create downstream authority."""
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+
+    def unavailable_checkpoint(*_args):
+        raise OSError("independent checkpoint unavailable")
+
+    with pytest.raises(OSError, match="independent checkpoint unavailable"):
+        reconcile_authenticated_agentcontainment_registries(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            verify_registry_snapshot=unavailable_checkpoint,
+        )
+    assert outbox.pending(agent) == []
