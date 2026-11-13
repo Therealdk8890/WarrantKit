@@ -274,7 +274,7 @@ fences and restored backups.
 ## Optional external registry-authentication gate
 
 `reconcile_authenticated_agentcontainment_registries` requires an explicit
-`verify_registry_snapshot(fence_path, incident_path)` callback that returns
+`verify_registry_snapshot(fence_path, incident_path, fence_bytes, incident_bytes)` callback that returns
 the literal boolean `True` before rebuilding a pending downstream fence.
 False, absent, or non-boolean trust decisions fail closed. The callback is
 an integration boundary, **not** a supplied cryptographic verifier: a
@@ -283,9 +283,11 @@ independently protected checkpoint. The unverified registry recovery
 helper remains a separate compatibility/reference path and must not be
 presented as cryptographically authenticated.
 
-**Remaining TOCTOU limitation:** this reference checks file paths and then
-reopens them during reconciliation. An attacker able to replace files
-between verification and reading can defeat the trust decision. A production
-implementation must verify and parse the same immutable bytes or use an
-equivalent race-resistant snapshot before signing. The tests demonstrate
-the fail-closed callback decision, not end-to-end tamper resistance.
+**Captured-byte TOCTOU mitigation:** the authenticated helper captures the
+fence and optional incident bytes once, passes those exact bytes plus the
+original paths to the verifier, and parses private snapshot copies. Replacing
+the original files after the callback cannot change the parsed recovery
+record. This does not prevent a compromised controller, a verifier that
+accepts malicious bytes, or a coordinated rollback of the checkpoint and
+registries. The original unauthenticated compatibility helper does not
+provide this snapshot guarantee.
