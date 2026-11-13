@@ -127,3 +127,48 @@ def test_tampered_persisted_receipt_does_not_count_as_verified(components):
     assert not restarted.verified("agent", 0)
     with pytest.raises(PendingDownstreamFence):
         restarted.require_verified("agent", 0)
+
+
+def test_outbox_rejects_missing_initial_and_intermediate_epochs(components):
+    fence, endpoint, verifier, outbox, path = components
+    with pytest.raises(DownstreamDenied, match="noncontiguous"):
+        outbox.enqueue(transition(fence, 1, False))
+    outbox.enqueue(transition(fence, 0, True))
+    with pytest.raises(DownstreamDenied, match="noncontiguous"):
+        outbox.enqueue(transition(fence, 2, False))
+    assert [e.epoch for e in outbox.pending("agent")] == [0]
+
+
+def test_later_receipt_not_verified_if_earlier_receipt_deleted(components):
+    import sqlite3
+    fence, endpoint, verifier, outbox, path = components
+    outbox.enqueue(transition(fence, 0, True))
+    outbox.enqueue(transition(fence, 1, False))
+    assert outbox.deliver_pending("agent", endpoint.apply) == 2
+    outbox.require_verified("agent", 1)
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "UPDATE transitions SET receipt_json=NULL WHERE agent_id=? AND epoch=0",
+            ("agent",),
+        )
+    restarted = DurableTransitionOutbox(path, verifier=verifier)
+    assert not restarted.verified("agent", 1)
+    with pytest.raises(PendingDownstreamFence):
+        restarted.require_verified("agent", 1)
+
+
+def test_deleted_middle_transition_invalidates_later_receipt(components):
+    import sqlite3
+    fence, endpoint, verifier, outbox, path = components
+    for epoch, active in ((0, True), (1, False), (2, True)):
+        outbox.enqueue(transition(fence, epoch, active))
+    assert outbox.deliver_pending("agent", endpoint.apply) == 3
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "DELETE FROM transitions WHERE agent_id=? AND epoch=1",
+            ("agent",),
+        )
+    restarted = DurableTransitionOutbox(path, verifier=verifier)
+    assert not restarted.verified("agent", 2)
+    with pytest.raises(DownstreamDenied, match="noncontiguous"):
+        restarted.enqueue(transition(fence, 3, False))
