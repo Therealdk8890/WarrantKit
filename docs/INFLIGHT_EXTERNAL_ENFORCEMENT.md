@@ -396,3 +396,21 @@ attested durable log. Even a trusted checkpoint cannot retract an effect
 committed before the downstream fence transaction. A green test run proves
 only the tested integration contract, not provider independence or production
 rollback resistance.
+
+
+### Transactional SQLite checkpoint reference
+
+`agentcontain/checkpoint_sqlite_reference.py` implements atomic per-agent
+compare-and-swap using SQLite `BEGIN IMMEDIATE`. It persists a checkpoint
+across process restarts, rejects epoch gaps, rollback and conflicting replay,
+and fails closed if the stored previous checkpoint is malformed. Its tests
+cover restart persistence and corrupted prior state.
+
+**This is not the independently protected production authority.** A SQLite
+file co-located with the controller/outbox can be rolled back with them, and
+this reference has no authenticated network endpoint, operator identity,
+remote replication, hardware monotonicity, or checkpoint-key custody. Deploying
+it on a different path or process alone does not change those facts. A real
+provider must place the atomic CAS behind an authenticated independent trust
+boundary and test whole-storage restore and disaster recovery before making
+rollback-resistance claims.
