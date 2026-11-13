@@ -101,3 +101,21 @@ def test_sqlite_transaction_rollback_preserves_checkpoint_on_failed_write(tmp_pa
     with sqlite3.connect(path) as db:
         db.execute("DROP TRIGGER reject_epoch_one")
     assert SQLiteCheckpointAuthority(path).advance(checkpoint(1, "b"))
+
+
+def test_checkpoint_survives_forced_process_exit_after_commit(tmp_path):
+    import subprocess
+    import sys
+
+    path = tmp_path / "abrupt-exit-checkpoint.db"
+    script = (
+        "import os, sys\n"
+        "from agentcontain.checkpoint_sqlite_reference import SQLiteCheckpointAuthority\n"
+        "from agentcontain.agentcontainment_fence_recovery import TrustedRegistryCheckpoint\n"
+        "authority = SQLiteCheckpointAuthority(sys.argv[1])\n"
+        "authority.advance(TrustedRegistryCheckpoint('agent', 0, 'a' * 64, None))\n"
+        "os._exit(37)\n"
+    )
+    result = subprocess.run([sys.executable, "-c", script, str(path)], check=False)
+    assert result.returncode == 37
+    assert SQLiteCheckpointAuthority(path).read("agent") == checkpoint(0)
