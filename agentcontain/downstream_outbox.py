@@ -187,3 +187,23 @@ class DurableTransitionOutbox:
             raise PendingDownstreamFence(
                 f"downstream fence for agent={agent_id!r} epoch={epoch} is not verified"
             )
+
+    def require_verified_against_authority(
+        self, agent_id: str, epoch: int,
+        read_authoritative_epoch: Callable[[str], int],
+    ) -> None:
+        """Verify a receipt against an independently trusted epoch source.
+
+        The authoritative reader must not derive its epoch from this outbox.
+        It must fail closed on missing, stale, or tampered authority state.
+        This catches rollback of an otherwise internally consistent outbox
+        when the independent authority still records a newer epoch.
+        """
+        authority_epoch = read_authoritative_epoch(agent_id)
+        if type(authority_epoch) is not int or authority_epoch < 0:
+            raise PendingDownstreamFence("invalid independent authority epoch")
+        if type(epoch) is not int or epoch != authority_epoch:
+            raise PendingDownstreamFence(
+                "downstream epoch does not match independent authority"
+            )
+        self.require_verified(agent_id, epoch)
