@@ -38,9 +38,9 @@ def test_authenticated_receipt_only_after_committed_transition(setup):
     receipt = delivery.deliver(initial)
     assert receipt.status == "committed"
     verifier.verify(initial, receipt)
-    assert not fence.commit(fence.sign_operation(
+    assert fence.commit(fence.sign_operation(
         agent_id="agent-1", epoch=0, operation_id="first", value="committed"
-    )) is False
+    )) is True
 
     fence_transition = envelope(fence, epoch=1, active=False)
     fenced_receipt = delivery.deliver(fence_transition)
