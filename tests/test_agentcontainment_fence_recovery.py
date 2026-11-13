@@ -377,3 +377,60 @@ def test_external_checkpoint_rejects_rollback_and_wrong_identity(env):
                 read_trusted_checkpoint=lambda _agent, cp=checkpoint: cp,
             )
     assert outbox.pending(agent) == []
+
+
+def test_external_checkpoint_outage_fails_without_enqueue(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+
+    def unavailable(_agent):
+        raise ConnectionError("trusted checkpoint service unavailable")
+
+    with pytest.raises(ConnectionError, match="checkpoint service unavailable"):
+        reconcile_with_trusted_checkpoint(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            read_trusted_checkpoint=unavailable,
+        )
+    assert outbox.pending(agent) == []
+
+
+def test_external_checkpoint_rejects_coordinated_registry_rollback(env):
+    """An external newer epoch detects a matching old registry and outbox."""
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    old_registry = fence_path.read_bytes()
+    # A protected external authority has advanced independently of this disk.
+    checkpoint = TrustedRegistryCheckpoint(
+        agent_id=agent, epoch=2,
+        fence_sha256=hashlib.sha256(old_registry).hexdigest(),
+        incident_sha256=None,
+    )
+    # Simulate restoring the old registry and outbox together; the digest
+    # matches the old bytes, but the external monotonic epoch must still win.
+    fence_path.write_bytes(old_registry)
+    with pytest.raises(DownstreamDenied, match="not authenticated"):
+        reconcile_with_trusted_checkpoint(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            read_trusted_checkpoint=lambda _agent: checkpoint,
+        )
+    assert outbox.pending(agent) == []
+
+
+def test_external_checkpoint_rejects_incident_presence_change(env):
+    agent, fences, incidents, downstream, endpoint, outbox, signer, fence_path, incident_path = env
+    fences.prepare(agent, 1)
+    checkpoint = TrustedRegistryCheckpoint(
+        agent_id=agent, epoch=1,
+        fence_sha256=hashlib.sha256(fence_path.read_bytes()).hexdigest(),
+        incident_sha256=None,
+    )
+    incidents.record_containment("incident-checkpoint", agent, 1)
+    with pytest.raises(DownstreamDenied, match="not authenticated"):
+        reconcile_with_trusted_checkpoint(
+            agent_id=agent, fence_path=fence_path, incident_path=incident_path,
+            outbox=outbox, sign_transition=signer,
+            read_trusted_checkpoint=lambda _agent: checkpoint,
+        )
+    assert outbox.pending(agent) == []
