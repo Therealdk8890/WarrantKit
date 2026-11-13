@@ -291,3 +291,17 @@ record. This does not prevent a compromised controller, a verifier that
 accepts malicious bytes, or a coordinated rollback of the checkpoint and
 registries. The original unauthenticated compatibility helper does not
 provide this snapshot guarantee.
+
+
+### Externally pinned snapshot digests
+
+`pinned_registry_snapshot_verifier(expected_fence_sha256=...,
+expected_incident_sha256=...)` is a reference callback for the captured-byte
+recovery API. It compares SHA-256 digests of the exact captured fence and
+optional incident bytes with independently supplied expected values. An absent
+incident file must have an absent expected digest; a mismatch fails closed.
+Invalid digest strings are rejected. **This helper does not create, sign,
+protect, or advance the checkpoint.** The caller must obtain expected digests
+from a separate authenticated, freshness-protected source; copying hashes from
+the same mutable disk is not security. SHA-256 equality alone does not prevent
+coordinated rollback.
