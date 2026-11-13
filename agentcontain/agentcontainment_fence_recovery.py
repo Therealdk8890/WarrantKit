@@ -67,6 +67,50 @@ def reconcile_agentcontainment_registries(
     )
 
 
+def pinned_registry_snapshot_verifier(
+    *, expected_fence_sha256: str, expected_incident_sha256: str | None,
+) -> Callable[[Path, Path, bytes, bytes | None], bool]:
+    """Compare captured bytes to digests supplied by a trusted external source.
+
+    Digest strings MUST come from an independently protected checkpoint,
+    never from the same mutable registry directory. This checks equality,
+    not checkpoint authenticity or freshness.
+    """
+    import hashlib
+    import hmac
+
+    def valid_digest(value: object) -> bool:
+        return (
+            isinstance(value, str)
+            and len(value) == 64
+            and all(ch in "0123456789abcdef" for ch in value)
+        )
+
+    if not valid_digest(expected_fence_sha256):
+        raise ValueError("invalid expected fence SHA-256 digest")
+    if expected_incident_sha256 is not None and not valid_digest(expected_incident_sha256):
+        raise ValueError("invalid expected incident SHA-256 digest")
+
+    def verify(
+        _fence_path: Path, _incident_path: Path,
+        fence_bytes: bytes, incident_bytes: bytes | None,
+    ) -> bool:
+        if (incident_bytes is None) != (expected_incident_sha256 is None):
+            return False
+        if not hmac.compare_digest(
+            hashlib.sha256(fence_bytes).hexdigest(), expected_fence_sha256
+        ):
+            return False
+        return (
+            incident_bytes is None
+            or hmac.compare_digest(
+                hashlib.sha256(incident_bytes).hexdigest(), expected_incident_sha256
+            )
+        )
+
+    return verify
+
+
 def reconcile_authenticated_agentcontainment_registries(
     *, agent_id: str, fence_path: str | Path, incident_path: str | Path,
     outbox: DurableTransitionOutbox,
