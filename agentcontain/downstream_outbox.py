@@ -81,6 +81,18 @@ class DurableTransitionOutbox:
                     if old[0] != raw:
                         raise DownstreamDenied("conflicting transition for epoch")
                 else:
+                    # Never fabricate continuity after a restart or restore.
+                    # A missing earlier epoch is a reconciliation failure, not
+                    # permission to skip directly to a later authority state.
+                    last = db.execute(
+                        "SELECT MAX(epoch) FROM transitions WHERE agent_id=?",
+                        (envelope.agent_id,),
+                    ).fetchone()[0]
+                    expected = 0 if last is None else last + 1
+                    if envelope.epoch != expected:
+                        raise DownstreamDenied(
+                            f"noncontiguous outbox epoch: expected {expected}, got {envelope.epoch}"
+                        )
                     db.execute(
                         "INSERT INTO transitions(request_id, agent_id, epoch, active, envelope_json)"
                         " VALUES (?,?,?,?,?)",
@@ -112,6 +124,23 @@ class DurableTransitionOutbox:
             self._verifier.verify(
                 self._parse_envelope(row[0]), self._parse_receipt(row[1])
             )
+            # Validate every preceding receipt too: an isolated later ACK
+            # cannot establish complete, ordered authority history.
+            with self._db() as db:
+                history = db.execute(
+                    "SELECT epoch, envelope_json, receipt_json FROM transitions "
+                    "WHERE agent_id=? AND epoch<=? ORDER BY epoch",
+                    (agent_id, epoch),
+                ).fetchall()
+            if len(history) != epoch + 1:
+                return False
+            for expected_epoch, (stored_epoch, envelope_json, receipt_json) in enumerate(history):
+                if stored_epoch != expected_epoch or receipt_json is None:
+                    return False
+                self._verifier.verify(
+                    self._parse_envelope(envelope_json),
+                    self._parse_receipt(receipt_json),
+                )
         except (DownstreamDenied, ValueError, TypeError, KeyError, json.JSONDecodeError):
             return False
         return True
