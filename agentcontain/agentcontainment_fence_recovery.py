@@ -71,21 +71,40 @@ def reconcile_authenticated_agentcontainment_registries(
     *, agent_id: str, fence_path: str | Path, incident_path: str | Path,
     outbox: DurableTransitionOutbox,
     sign_transition: Callable[[str, int, bool], TransitionEnvelope],
-    verify_registry_snapshot: Callable[[Path, Path], bool],
+    verify_registry_snapshot: Callable[[Path, Path, bytes, bytes | None], bool],
 ) -> TransitionEnvelope:
-    """Require an external trust decision before using registry state.
+    """Authenticate captured bytes, then parse exactly those bytes.
 
-    The verifier must independently authenticate BOTH file identities and
-    contents against a trusted checkpoint or equivalent protected source.
-    It must not simply parse these files and compare them to themselves.
-    This is a reference boundary, not a built-in signature implementation.
+    The verifier receives original file identities AND the exact bytes used
+    for reconciliation. It must bind these to an independently protected
+    checkpoint; merely returning True is not authentication.
     """
-    if verify_registry_snapshot(Path(fence_path), Path(incident_path)) is not True:
+    import tempfile
+
+    fence_file, incident_file = Path(fence_path), Path(incident_path)
+    if not fence_file.is_file():
+        raise DownstreamDenied("durable runtime fence registry is unavailable")
+    fence_bytes = fence_file.read_bytes()
+    incident_bytes = incident_file.read_bytes() if incident_file.is_file() else None
+    if verify_registry_snapshot(
+        fence_file, incident_file, fence_bytes, incident_bytes
+    ) is not True:
         raise DownstreamDenied("controller registry snapshot not authenticated")
-    return reconcile_agentcontainment_registries(
-        agent_id=agent_id, fence_path=fence_path, incident_path=incident_path,
-        outbox=outbox, sign_transition=sign_transition,
-    )
+
+    # The registry parsers only accept paths. Feed them private, immutable
+    # captured copies rather than reopening the original mutable paths.
+    with tempfile.TemporaryDirectory(prefix="warrantkit-fence-snapshot-") as directory:
+        snapshot_dir = Path(directory)
+        fence_snapshot = snapshot_dir / "fences.json"
+        incident_snapshot = snapshot_dir / "incidents.json"
+        fence_snapshot.write_bytes(fence_bytes)
+        if incident_bytes is not None:
+            incident_snapshot.write_bytes(incident_bytes)
+        return reconcile_agentcontainment_registries(
+            agent_id=agent_id, fence_path=fence_snapshot,
+            incident_path=incident_snapshot, outbox=outbox,
+            sign_transition=sign_transition,
+        )
 
 
 def require_verified_against_agentcontainment_fence(
