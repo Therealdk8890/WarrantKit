@@ -44,3 +44,60 @@ def test_reference_checkpoint_invalid_prior_row_fails_closed(tmp_path):
     with pytest.raises(DownstreamDenied):
         authority.advance(checkpoint(1, "b"))
     assert authority.read("agent").epoch == 0
+
+
+def test_concurrent_writers_only_one_conflicting_epoch_wins(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    path = tmp_path / "concurrent-checkpoint.db"
+    SQLiteCheckpointAuthority(path).advance(checkpoint(0))
+    barrier = Barrier(2)
+
+    def compete(digest):
+        barrier.wait(timeout=10)
+        try:
+            return SQLiteCheckpointAuthority(path).advance(checkpoint(1, digest))
+        except DownstreamDenied:
+            return False
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a = pool.submit(compete, "b")
+        b = pool.submit(compete, "c")
+        results = [a.result(timeout=20), b.result(timeout=20)]
+    assert sorted(results) == [False, True]
+    stored = SQLiteCheckpointAuthority(path).read("agent")
+    assert stored in (checkpoint(1, "b"), checkpoint(1, "c"))
+
+
+def test_concurrent_identical_replay_is_idempotent(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    path = tmp_path / "replay-checkpoint.db"
+    SQLiteCheckpointAuthority(path).advance(checkpoint(0))
+    barrier = Barrier(2)
+
+    def replay():
+        barrier.wait(timeout=10)
+        return SQLiteCheckpointAuthority(path).advance(checkpoint(1, "b"))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: replay(), range(2)))
+    assert sorted(results) == [False, True]
+    assert SQLiteCheckpointAuthority(path).read("agent") == checkpoint(1, "b")
+
+
+def test_sqlite_transaction_rollback_preserves_checkpoint_on_failed_write(tmp_path):
+    path = tmp_path / "rollback-checkpoint.db"
+    authority = SQLiteCheckpointAuthority(path)
+    assert authority.advance(checkpoint(0))
+    with sqlite3.connect(path) as db:
+        db.execute("""CREATE TRIGGER reject_epoch_one BEFORE UPDATE ON checkpoints
+            WHEN NEW.epoch = 1 BEGIN SELECT RAISE(ABORT, 'simulated write failure'); END""")
+    with pytest.raises(sqlite3.DatabaseError, match="simulated write failure"):
+        authority.advance(checkpoint(1, "b"))
+    assert SQLiteCheckpointAuthority(path).read("agent") == checkpoint(0)
+    with sqlite3.connect(path) as db:
+        db.execute("DROP TRIGGER reject_epoch_one")
+    assert SQLiteCheckpointAuthority(path).advance(checkpoint(1, "b"))
