@@ -34,6 +34,14 @@ The portable `warrantkit demo` is a simulated lifecycle demonstration, not proof
 
 WarrantKit binds execution authority to accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, retained pre-containment authority is fenced out. WarrantKit coordinates the authority lifecycle; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides external runtime enforcement.
 
+## Open-source authority; NobodySystems enterprise operations
+
+**WarrantKit is the independent Apache-2.0 authority engine.** Run its Warrant/epoch-fencing and controller-owned-gateway proofs without any proprietary service. [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides the external enforcement boundary; [DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit) provides separately verifiable trace evidence.
+
+**NobodySystems** is the **proprietary operational/control-plane layer** coordinating these independent engines for teams. Its **private alpha** currently supports local operator workflows, bounded guarded tools, and separate evidence-bundle verification. Organization-wide policy lifecycle, cross-engine evidence correlation, fleet operations, enterprise identity/support guarantees, and hosted management are **planned capabilities, not a shipped production offer**.
+
+Evaluate the OSS proof below first. For exact engine/platform responsibilities, test assertions, licensing, access, and current release limits, see [NobodySystems integration and commercial boundary](docs/NOBODYSYSTEMS.md). The existing separate `WarrantKit-Commercial` tenant-ingestion prototype is not evidence that NobodySystems Enterprise or Cloud is production-ready.
+
 ## Current implementation status
 
 The current OSS implementation is a local authority-lifecycle and runtime-enforcement integration, not a hosted security platform.
