@@ -6,6 +6,48 @@ The project is currently pre-1.0. Entries describe shipped repository changes; t
 
 ## Unreleased
 
+## 0.2.0 — 2026-11-15
+
+### Added
+
+- Public `BoundGuardedExecution` and `GuardedExecutionDenied` APIs for trusted,
+  synchronous Warrant-aware execution through a controller-owned ActionGateway.
+  The binding checks the accepted admission, current runtime state, signed Warrant
+  and operation capability before policy evaluation and again inside the guarded
+  executor callback. Asynchronous callbacks/results are rejected.
+- Experimental Ed25519 raw-JSON external-decision import with domain-separated
+  signatures, pinned issuer/audience/agent/execution identity and a controller-owned
+  SQLite decision-replay store. The importer returns an unsigned local Warrant;
+  local signing and runtime enforcement remain separate required boundaries.
+- Regression coverage for final authority rechecks and signed external-decision
+  authentication, malformed inputs, identity binding and replay rejection.
+
+### Fixed
+
+- LangChain tools and middleware, CrewAI, OpenAI Agents and synchronous MCP wrappers
+  recheck Warrant authority inside their runtime-guarded executor callbacks after
+  gateway policy evaluation, closing the wrapped preflight expiry/revocation gap.
+- Repair LangChain test-tool descriptions and the admission-replacement error assertion;
+  run the full LangChain adapter/middleware regression files in the real-framework CI job.
+
+### Validation and scope
+
+- CI proof tests use DProvenanceKit 0.10.0 for attestation and real-kill evidence
+  interoperability. Core dependencies remain `agentcontainment>=0.1.3,<0.2` and the
+  production AgentContainment submodule remains pinned to
+  `9738c772aff900eb0ce5f1f9d93760d2f9e5de4f`.
+- The signed external-decision profile remains experimental and opt-in. It is not
+  OIDC/OAuth/JWT support, distributed replay protection, a protected anti-rollback
+  anchor, or production-certified IAM. Operators provision trusted keys and protect
+  the persistent replay database independently of the submitted decision.
+- Guarded execution protects operations actually routed through the trusted gateway.
+  It does not establish hostile-code isolation, cancel accepted remote requests,
+  reverse completed effects or eliminate alternate credential paths.
+- PR #248's newer-runtime in-flight/downstream enforcement references are excluded.
+  No newer runtime promotion or distributed enforcement claim is made by this release.
+- Release publication verifies the GitHub tag against the package version before
+  building. See [the release procedure](docs/RELEASE_0.2.0.md) for proof and artifact gates.
+
 ## 0.1.6 — 2026-10-31
 
 ### Added

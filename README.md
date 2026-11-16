@@ -4,16 +4,16 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/warrantkit)](https://pypi.org/project/warrantkit/)
 
-**Latest release: [`warrantkit 0.1.6`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.1.6)** · [PyPI package](https://pypi.org/project/warrantkit/)
+**Version: [`warrantkit 0.2.0`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.2.0)** · [PyPI package](https://pypi.org/project/warrantkit/)
 
-**Release focus:** External Proof Package and Evaluation Readiness.
+**Release focus:** Public guarded execution, final authority rechecks, and experimental authenticated external-decision import. See the [0.2.0 release record and procedure](docs/RELEASE_0.2.0.md).
 
-## Install the 0.1.6 release
+## Install version 0.2.0
 
-WarrantKit 0.1.6 is published. Install the exact release with Python 3.11 or newer:
+Install the versioned package with Python 3.11 or newer:
 
 ```bash
-python -m pip install --upgrade warrantkit==0.1.6
+python -m pip install --upgrade warrantkit==0.2.0
 warrantkit demo
 ```
 
@@ -89,12 +89,12 @@ warrantkit demo
 
 Each proof has a narrower claim than a full production deployment. Preserve real-kill artifacts with the exact source revision and host details. The default demo signing key supports integrity checks only; authenticated incident evidence requires an operator-controlled Ed25519 key and a public key provisioned independently of the evidence bundle. See the [real-kill guide](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation) and [trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
-## Public guarded-execution API (unreleased)
+## Public guarded-execution API (0.2.0)
 
-The development branch provides `BoundGuardedExecution` for trusted,
+Version 0.2.0 provides `BoundGuardedExecution` for trusted,
 synchronous Python integrations that need one Warrant-aware execution
 boundary without importing private framework-adapter functions. This API
-is **not included in the published 0.1.6 package** until a new release.
+was introduced after 0.1.6.
 
 ```python
 from agentcontain import BoundGuardedExecution
