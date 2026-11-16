@@ -27,6 +27,8 @@ The project is currently pre-1.0. Entries describe shipped repository changes; t
 - LangChain tools and middleware, CrewAI, OpenAI Agents and synchronous MCP wrappers
   recheck Warrant authority inside their runtime-guarded executor callbacks after
   gateway policy evaluation, closing the wrapped preflight expiry/revocation gap.
+- Repair LangChain test-tool descriptions and the admission-replacement error assertion;
+  run the full LangChain adapter/middleware regression files in the real-framework CI job.
 
 ### Validation and scope
 

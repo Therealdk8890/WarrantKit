@@ -140,8 +140,8 @@ jobs:
       - name: Install pytest for focused integration tests
         run: python -m pip install pytest
 
-      - name: Run public LangChain middleware factory tests
-        run: python -m pytest -q tests/test_langchain_middleware_factory.py
+      - name: Run LangChain adapter and middleware regression tests
+        run: python -m pytest -q tests/test_langchain_integration.py tests/test_langchain_middleware.py tests/test_langchain_middleware_factory.py
 
       - name: Run deterministic authority boundary proof
         run: python tools/run_authority_boundary_demo.py
