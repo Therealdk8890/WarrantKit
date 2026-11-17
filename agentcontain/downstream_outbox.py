@@ -121,9 +121,12 @@ class DurableTransitionOutbox:
         if row is None or row[1] is None:
             return False
         try:
-            self._verifier.verify(
-                self._parse_envelope(row[0]), self._parse_receipt(row[1])
-            )
+            envelope = self._parse_envelope(row[0])
+            # The database index is not authenticated by the receipt MAC.
+            # Reject a valid receipt transplanted into another agent's row.
+            if envelope.agent_id != agent_id or envelope.epoch != epoch:
+                return False
+            self._verifier.verify(envelope, self._parse_receipt(row[1]))
             # Validate every preceding receipt too: an isolated later ACK
             # cannot establish complete, ordered authority history.
             with self._db() as db:
@@ -137,10 +140,10 @@ class DurableTransitionOutbox:
             for expected_epoch, (stored_epoch, envelope_json, receipt_json) in enumerate(history):
                 if stored_epoch != expected_epoch or receipt_json is None:
                     return False
-                self._verifier.verify(
-                    self._parse_envelope(envelope_json),
-                    self._parse_receipt(receipt_json),
-                )
+                prior = self._parse_envelope(envelope_json)
+                if prior.agent_id != agent_id or prior.epoch != stored_epoch:
+                    return False
+                self._verifier.verify(prior, self._parse_receipt(receipt_json))
         except (DownstreamDenied, ValueError, TypeError, KeyError, json.JSONDecodeError):
             return False
         return True
