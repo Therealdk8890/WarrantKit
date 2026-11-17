@@ -11,10 +11,19 @@ from typing import Any
 
 from ..engine import Admission
 from ._execution import execute_authorized, snapshot_authority
+from ._authority import verify_current_authority
 
 
 class LangChainWarrantError(RuntimeError):
     """Raised when a LangChain tool call is not authorized by WarrantKit."""
+
+
+def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
+    """Compatibility hook still consumed by LangChain middleware."""
+    verify_current_authority(
+        admission, gateway, warrant_verifier, expected_snapshot,
+        error_type=LangChainWarrantError, framework="LangChain",
+    )
 
 
 def wrap_langchain_tool(
