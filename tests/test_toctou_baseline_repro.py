@@ -53,7 +53,7 @@ def test_pre_fix_wrapper_can_execute_after_epoch_changes_between_check_and_use(m
     # tree. Do not treat a fixed wrapper's expected denial as a failed exploit
     # reproduction; the dedicated regression test covers that behavior.
     wrapper_source = inspect.getsource(integration.wrap_openai_tool)
-    if "execute_with_lease" in wrapper_source:
+    if "execute_with_lease" in wrapper_source or "execute_authorized" in wrapper_source:
         pytest.skip("patched wrapper binds authorization to the execution lease")
 
     calls: list[str] = []

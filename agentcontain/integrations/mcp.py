@@ -7,14 +7,12 @@ point.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from functools import wraps
 import inspect
 from typing import Any
-from uuid import uuid4
 
 from ..engine import Admission
-from ._authority import verify_current_authority, verify_current_capability
+from ._execution import execute_authorized, snapshot_authority
 
 
 class MCPWarrantError(RuntimeError):
@@ -59,64 +57,24 @@ def wrap_mcp_tool(
 
     operation = name_override or getattr(function, "__name__", "mcp_tool")
     required_capability = capability or operation
-    expected_snapshot = (
-        admission.identity,
-        deepcopy(admission.policy),
-        admission.warrant,
-        deepcopy(admission.warrant_attestation),
-    )
+    expected_snapshot = snapshot_authority(admission)
 
     @wraps(function)
     def invoke_authorized(*args: Any, **kwargs: Any) -> Any:
-        execution_lease = gateway.acquire_lease()
-        if execution_lease is None:
-            raise MCPWarrantError(
-                "runtime is not active; execution lease unavailable"
-            )
-
-        verify_current_authority(
-            admission,
-            gateway,
-            warrant_verifier,
-            expected_snapshot,
-            error_type=MCPWarrantError,
-            framework="MCP",
-        )
-
-        warrant = admission.warrant
-        if warrant is None:
-            raise MCPWarrantError("execution has no Warrant authority")
-        if required_capability not in warrant.authority.capabilities:
-            raise MCPWarrantError(
-                f"Warrant does not grant capability '{required_capability}'"
-            )
-
-        from agent_containment.models import Action, DecisionType
-
-        action = Action(
-            agent_id=admission.identity.agent_id,
-            action_id=f"mcp:{admission.identity.execution_id}:{uuid4()}",
+        return execute_authorized(
+            function=lambda: function(*args, **kwargs),
+            admission=admission,
+            gateway=gateway,
+            warrant_verifier=warrant_verifier,
+            expected_snapshot=expected_snapshot,
+            required_capability=required_capability,
             operation=operation,
             resource=resource,
             risk=risk,
-            metadata={"framework": "mcp"},
+            action_prefix="mcp",
+            metadata_framework="mcp",
+            framework="MCP",
+            error_type=MCPWarrantError,
         )
-        def guarded_callback(_action):
-            verify_current_capability(
-                admission, gateway, warrant_verifier, expected_snapshot,
-                required_capability, error_type=MCPWarrantError, framework="MCP",
-            )
-            return function(*args, **kwargs)
-
-        result = gateway.execute_with_lease(
-            action,
-            execution_lease,
-            guarded_callback,
-        )
-        if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
-            raise MCPWarrantError(
-                f"AgentContainment denied '{operation}': {result.reason}"
-            )
-        return result
 
     return invoke_authorized

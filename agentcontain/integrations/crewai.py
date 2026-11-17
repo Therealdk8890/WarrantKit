@@ -6,27 +6,14 @@ the controller-owned gateway is the final runtime enforcement point.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
-from uuid import uuid4
 
 from ..engine import Admission
-from ._authority import verify_current_authority, verify_current_capability
+from ._execution import execute_authorized, snapshot_authority
 
 
 class CrewAIWarrantError(RuntimeError):
     """Raised when a CrewAI tool call is not authorized by WarrantKit."""
-
-
-def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
-    verify_current_authority(
-        admission,
-        gateway,
-        warrant_verifier,
-        expected_snapshot,
-        error_type=CrewAIWarrantError,
-        framework="CrewAI",
-    )
 
 
 def wrap_crewai_tool(
@@ -65,12 +52,7 @@ def wrap_crewai_tool(
 
     # Pin this wrapper to the authority accepted at construction time; a
     # different signed Warrant must not be replayed through mutable Admission.
-    expected_snapshot = (
-        admission.identity,
-        deepcopy(admission.policy),
-        admission.warrant,
-        deepcopy(admission.warrant_attestation),
-    )
+    expected_snapshot = snapshot_authority(admission)
 
     operation = str(tool.name)
     required_capability = capability or operation
@@ -78,49 +60,21 @@ def wrap_crewai_tool(
     original_description = getattr(tool, "description", None)
 
     def invoke_authorized(**kwargs: Any) -> Any:
-        # Pin the runtime lease before checking the Warrant. If containment or
-        # recovery occurs after verification, this exact lease becomes invalid;
-        # never acquire a fresh lease for an already-authorized invocation.
-        execution_lease = gateway.acquire_lease()
-        if execution_lease is None:
-            raise CrewAIWarrantError(
-                "runtime is not active; execution lease unavailable"
-            )
-        _verify_current_authority(admission, gateway, warrant_verifier, expected_snapshot)
-        warrant = admission.warrant
-        assert warrant is not None
-        if required_capability not in warrant.authority.capabilities:
-            raise CrewAIWarrantError(
-                f"Warrant does not grant capability '{required_capability}'"
-            )
-
-        from agent_containment.models import Action, DecisionType
-
-        action = Action(
-            agent_id=admission.identity.agent_id,
-            action_id=f"crewai:{admission.identity.execution_id}:{uuid4()}",
+        return execute_authorized(
+            function=lambda: tool.run(**kwargs),
+            admission=admission,
+            gateway=gateway,
+            warrant_verifier=warrant_verifier,
+            expected_snapshot=expected_snapshot,
+            required_capability=required_capability,
             operation=operation,
             resource=resource,
             risk=risk,
-            metadata={"framework": "crewai"},
+            action_prefix="crewai",
+            metadata_framework="crewai",
+            framework="CrewAI",
+            error_type=CrewAIWarrantError,
         )
-        def guarded_callback(_action):
-            verify_current_capability(
-                admission, gateway, warrant_verifier, expected_snapshot,
-                required_capability, error_type=CrewAIWarrantError, framework="CrewAI",
-            )
-            return tool.run(**kwargs)
-
-        result = gateway.execute_with_lease(
-            action,
-            execution_lease,
-            guarded_callback,
-        )
-        if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
-            raise CrewAIWarrantError(
-                f"AgentContainment denied '{operation}': {result.reason}"
-            )
-        return result
 
     from pydantic import BaseModel
 

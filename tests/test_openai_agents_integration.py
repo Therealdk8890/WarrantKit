@@ -137,7 +137,10 @@ def test_openai_agents_tool_rejects_execution_if_runtime_epoch_changes_after_war
     protected = integration.wrap_openai_tool(
         protected_write, admission, gateway, warrant_verifier=verifier
     )
-    original_check = integration.verify_current_authority
+    # Intercept the shared preflight verifier after the adapter refactor.
+    # The test must still advance the runtime between verification and gateway execution.
+    import agentcontain.integrations._execution as execution
+    original_check = execution.verify_current_capability
 
     def check_then_contain(*args, **kwargs):
         # Verification succeeds at epoch 0, then containment and recovery
@@ -147,7 +150,7 @@ def test_openai_agents_tool_rejects_execution_if_runtime_epoch_changes_after_war
         authorization = issue_recovery_authorization(admission)
         recover(admission, authorization)
 
-    monkeypatch.setattr(integration, "verify_current_authority", check_then_contain)
+    monkeypatch.setattr(execution, "verify_current_capability", check_then_contain)
     with pytest.raises(integration.OpenAIAgentsWarrantError):
         _invoke(protected, {"value": "must-not-run"})
     assert calls == []
