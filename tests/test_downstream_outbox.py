@@ -203,3 +203,25 @@ def test_independent_authority_epoch_must_be_valid_and_match(components):
             outbox.require_verified_against_authority("agent", 0, lambda _, b=bad: b)
     with pytest.raises(PendingDownstreamFence, match="independent authority"):
         outbox.require_verified_against_authority("agent", 0, lambda _: 1)
+
+
+def test_signed_receipt_transplanted_to_other_agent_row_is_not_verified(components):
+    """A valid MAC cannot authenticate an unrelated database index."""
+    import sqlite3
+    fence, endpoint, verifier, outbox, path = components
+    original = transition(fence, 0, True)
+    outbox.enqueue(original)
+    assert outbox.deliver_pending("agent", endpoint.apply) == 1
+    outbox.require_verified("agent", 0)
+
+    # Corrupt the unauthenticated SQLite index without changing the signed
+    # envelope or receipt. A lookup by the new agent must fail closed.
+    with sqlite3.connect(path) as db:
+        db.execute(
+            "UPDATE transitions SET agent_id=? WHERE agent_id=? AND epoch=?",
+            ("other-agent", "agent", 0),
+        )
+    restarted = DurableTransitionOutbox(path, verifier=verifier)
+    assert not restarted.verified("other-agent", 0)
+    with pytest.raises(PendingDownstreamFence):
+        restarted.require_verified("other-agent", 0)
