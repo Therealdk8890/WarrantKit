@@ -7,27 +7,14 @@ point.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from typing import Any
-from uuid import uuid4
 
 from ..engine import Admission
-from ._authority import verify_current_authority, verify_current_capability
+from ._execution import execute_authorized, snapshot_authority
 
 
 class LangChainWarrantError(RuntimeError):
     """Raised when a LangChain tool call is not authorized by WarrantKit."""
-
-
-def _verify_current_authority(admission: Admission, gateway, warrant_verifier, expected_snapshot) -> None:
-    verify_current_authority(
-        admission,
-        gateway,
-        warrant_verifier,
-        expected_snapshot,
-        error_type=LangChainWarrantError,
-        framework="LangChain",
-    )
 
 
 def wrap_langchain_tool(
@@ -70,60 +57,27 @@ def wrap_langchain_tool(
     # Pin the exact accepted authority to this wrapper. A different but validly
     # signed Warrant for another execution must not be replayed by mutating the
     # public Admission object after the wrapper was created.
-    expected_snapshot = (
-        admission.identity,
-        deepcopy(admission.policy),
-        admission.warrant,
-        deepcopy(admission.warrant_attestation),
-    )
+    expected_snapshot = snapshot_authority(admission)
 
     operation = str(tool.name)
     required_capability = capability or operation
 
     def invoke_authorized(**kwargs: Any) -> Any:
-        # Pin the runtime lease before checking the Warrant. If containment or
-        # recovery occurs after verification, this exact lease becomes invalid;
-        # never acquire a fresh lease for an already-authorized invocation.
-        execution_lease = gateway.acquire_lease()
-        if execution_lease is None:
-            raise LangChainWarrantError(
-                "runtime is not active; execution lease unavailable"
-            )
-        _verify_current_authority(admission, gateway, warrant_verifier, expected_snapshot)
-        warrant = admission.warrant
-        assert warrant is not None
-        if required_capability not in warrant.authority.capabilities:
-            raise LangChainWarrantError(
-                f"Warrant does not grant capability '{required_capability}'"
-            )
-
-        from agent_containment.models import Action, DecisionType
-
-        action = Action(
-            agent_id=admission.identity.agent_id,
-            action_id=f"langchain:{admission.identity.execution_id}:{uuid4()}",
+        return execute_authorized(
+            function=lambda: tool.invoke(kwargs),
+            admission=admission,
+            gateway=gateway,
+            warrant_verifier=warrant_verifier,
+            expected_snapshot=expected_snapshot,
+            required_capability=required_capability,
             operation=operation,
             resource=resource,
             risk=risk,
-            metadata={"framework": "langchain"},
+            action_prefix="langchain",
+            metadata_framework="langchain",
+            framework="LangChain",
+            error_type=LangChainWarrantError,
         )
-        def guarded_callback(_action):
-            verify_current_capability(
-                admission, gateway, warrant_verifier, expected_snapshot,
-                required_capability, error_type=LangChainWarrantError, framework="LangChain",
-            )
-            return tool.invoke(kwargs)
-
-        result = gateway.execute_with_lease(
-            action,
-            execution_lease,
-            guarded_callback,
-        )
-        if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
-            raise LangChainWarrantError(
-                f"AgentContainment denied '{operation}': {result.reason}"
-            )
-        return result
 
     args_schema = getattr(tool, "args_schema", None)
     if args_schema is None:
