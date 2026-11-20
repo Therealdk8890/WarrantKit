@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in WarrantKit does not behave as documented.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Please report security vulnerabilities privately as described in SECURITY.md, not here.
+  - type: input
+    id: version
+    attributes:
+      label: WarrantKit version
+      description: Output of `python -m pip show warrantkit`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI (`warrantkit demo`, `run`, `inspect`)
+        - Warrant admission / epoch fencing
+        - Guarded execution / ActionGateway
+        - LangChain adapter
+        - CrewAI adapter
+        - OpenAI Agents adapter
+        - MCP wrapper
+        - Evidence / incident bundles
+        - Real-kill (cgroup-v2) proof
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The smallest code or command sequence that shows the problem.
+      render: python
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Python 3.12, Ubuntu 24.04, cgroup v2, running as non-root"

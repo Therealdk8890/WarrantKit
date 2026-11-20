@@ -1,8 +1,54 @@
 # WarrantKit
 
 [![WarrantKit CI](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml)
-
 [![PyPI version](https://img.shields.io/pypi/v/warrantkit)](https://pypi.org/project/warrantkit/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/warrantkit/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
+**A kill switch for AI agent tool calls: when you contain an agent, the permission it already holds stops working.**
+
+WarrantKit gives each agent execution a signed Warrant tied to a policy, a runtime identity, and a runtime epoch. Containing the execution advances the epoch, so a Warrant the agent kept is rejected before its next tool call reaches your refund API, database, or other side effect. Adapters cover LangChain, CrewAI, the OpenAI Agents SDK, and synchronous raw MCP handlers.
+
+## Try it in 60 seconds
+
+No LLM, API key, network access, or root needed.
+
+```bash
+python -m pip install "warrantkit[attestation]"
+warrantkit demo
+```
+
+Then watch a real tool call get blocked after containment ([source, about 60 lines](examples/kill_switch_refund_agent/refund_agent.py)):
+
+```bash
+curl -sSLO https://raw.githubusercontent.com/Therealdk8890/WarrantKit/main/examples/kill_switch_refund_agent/refund_agent.py
+python refund_agent.py
+```
+
+```text
+before containment: refunded $25
+contained: complete=True, runtime epoch now 1
+after containment: DENIED - runtime execution lease unavailable
+refunds actually issued: [25]
+```
+
+## Why
+
+- **Prompt filters are probabilistic.** WarrantKit makes a deterministic allow-or-deny decision at the tool boundary, outside the model.
+- **Stopping an agent is not the same as revoking what it holds.** Authority issued before containment is fenced out by epoch, so a retained Warrant cannot be replayed.
+- **You get evidence, not just logs.** Warrants and incident bundles are signed (Ed25519) so a separate verifier can check what was authorized.
+
+## How it fits with what you already run
+
+WarrantKit complements these tools; it does not replace them.
+
+| Tool | What it answers | Where WarrantKit adds |
+|---|---|---|
+| IAM and secrets managers | Who may hold which credential | Ties an agent's authority to the current runtime state, so containment invalidates it |
+| Policy engines (OPA, Cedar) | Is this request allowed by policy | Binds the decision to a signed, epoch-fenced Warrant checked at execution time |
+| Guardrails and prompt filters | Is this input or output risky | A deterministic boundary that does not depend on the model behaving |
+| Sandboxes and cgroups | Can this process be isolated or killed | Coordinates authority with enforcement via [AgentContainment](https://github.com/Therealdk8890/AgentContainment) |
+| Tracing (LangSmith, Langfuse, OpenTelemetry) | What happened | Separately verifiable evidence of what was authorized and refused |
 
 **Version: [`warrantkit 0.2.0`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.2.0)** · [PyPI package](https://pypi.org/project/warrantkit/)
 
