@@ -1,0 +1,28 @@
+name: Integration or feature request
+description: Ask for a framework adapter, a new proof, or a feature.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: usecase
+    attributes:
+      label: What are you building?
+      description: The agent, the tools it calls, and what should be stopped or proven.
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Agent framework or runtime
+      placeholder: "LangGraph, CrewAI, OpenAI Agents SDK, MCP server, custom..."
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like WarrantKit to do?
+    validations:
+      required: true
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to open a pull request for this.
