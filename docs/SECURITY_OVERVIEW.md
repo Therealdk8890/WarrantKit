@@ -6,6 +6,12 @@
 
 WarrantKit coordinates policy-bound execution authority, runtime-epoch fencing, and evidence. The separate [AgentContainment](https://github.com/Therealdk8890/AgentContainment) engine performs runtime enforcement. This is an open-source security integration—not a hosted security platform, universal sandbox, or guarantee that every agent action is contained.
 
+## How this fits into NobodySystems
+
+WarrantKit is an **independently usable, Apache-2.0 runtime-authority component**. The **separately licensed NobodySystems private alpha** composes WarrantKit authority with [DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit) evidence and [AgentContainment](https://github.com/Therealdk8890/AgentContainment) enforcement. Its current scope is a local controller, constrained guarded operations, operator interfaces, and independent evidence verification. Organizational policy distribution, fleet management, cross-run evidence correlation, and enterprise-grade deployment/support guarantees remain roadmap items. None is a precondition for the public WarrantKit proofs.
+
+For a component comparison, reproducible evaluation checklist, trust limits, and controlled private-alpha access route, see [NobodySystems integration and commercial boundary](NOBODYSYSTEMS.md).
+
 ## The incident we are trying to prevent
 
 An autonomous agent receives authority to perform a protected action. Its runtime is later contained, but the agent, a queued tool call, or a retained authorization object may still attempt to act.

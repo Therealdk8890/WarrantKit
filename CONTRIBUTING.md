@@ -4,6 +4,27 @@ Thanks for contributing to WarrantKit.
 
 WarrantKit is developed as an open-source project under the Apache License 2.0. The repository is intentionally structured so that the open foundation can be reviewed, reused, and integrated while the project maintains a clear record of provenance for contributions.
 
+## Development setup
+
+```bash
+git clone --recurse-submodules https://github.com/Therealdk8890/WarrantKit.git
+cd WarrantKit
+python -m pip install -e ./AgentContainment
+python -m pip install -e ".[test]"
+python -m pytest -q tests -m "not integration"
+python examples/kill_switch_refund_agent/refund_agent.py
+```
+
+Tests marked `integration` need Linux with cgroup-v2 privileges; CI runs them in a privileged job, so you do not need root to contribute.
+
+## Good places to start
+
+- Docs and examples: a short, runnable example for another agent framework, or clearer wording where a boundary is easy to misread.
+- Adapter tests: more negative tests for the LangChain, CrewAI, OpenAI Agents, and MCP wrappers (expired, revoked, wrong-epoch, wrong-capability Warrants).
+- Error messages: make a denial explain which check failed and what to do next.
+
+Issues labeled `good first issue` are a good starting point when they exist. If you are unsure whether something is wanted, open an issue first.
+
 ## Contribution requirements
 
 Before submitting a contribution:

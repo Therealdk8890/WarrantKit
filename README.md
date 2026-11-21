@@ -1,19 +1,65 @@
 # WarrantKit
 
 [![WarrantKit CI](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml/badge.svg)](https://github.com/Therealdk8890/WarrantKit/actions/workflows/ci.yml)
-
 [![PyPI version](https://img.shields.io/pypi/v/warrantkit)](https://pypi.org/project/warrantkit/)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://pypi.org/project/warrantkit/)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-**Latest release: [`warrantkit 0.1.6`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.1.6)** · [PyPI package](https://pypi.org/project/warrantkit/)
+**A kill switch for AI agent tool calls: when you contain an agent, the permission it already holds stops working.**
 
-**Release focus:** External Proof Package and Evaluation Readiness.
+WarrantKit gives each agent execution a signed Warrant tied to a policy, a runtime identity, and a runtime epoch. Containing the execution advances the epoch, so a Warrant the agent kept is rejected before its next tool call reaches your refund API, database, or other side effect. Adapters cover LangChain, CrewAI, the OpenAI Agents SDK, and synchronous raw MCP handlers.
 
-## Install the 0.1.6 release
+## Try it in 60 seconds
 
-WarrantKit 0.1.6 is published. Install the exact release with Python 3.11 or newer:
+No LLM, API key, network access, or root needed.
 
 ```bash
-python -m pip install --upgrade warrantkit==0.1.6
+python -m pip install "warrantkit[attestation]"
+warrantkit demo
+```
+
+Then watch a real tool call get blocked after containment ([source, about 60 lines](examples/kill_switch_refund_agent/refund_agent.py)):
+
+```bash
+curl -sSLO https://raw.githubusercontent.com/Therealdk8890/WarrantKit/main/examples/kill_switch_refund_agent/refund_agent.py
+python refund_agent.py
+```
+
+```text
+before containment: refunded $25
+contained: complete=True, runtime epoch now 1
+after containment: DENIED - runtime execution lease unavailable
+refunds actually issued: [25]
+```
+
+## Why
+
+- **Prompt filters are probabilistic.** WarrantKit makes a deterministic allow-or-deny decision at the tool boundary, outside the model.
+- **Stopping an agent is not the same as revoking what it holds.** Authority issued before containment is fenced out by epoch, so a retained Warrant cannot be replayed.
+- **You get evidence, not just logs.** Warrants and incident bundles are signed (Ed25519) so a separate verifier can check what was authorized.
+
+## How it fits with what you already run
+
+WarrantKit complements these tools; it does not replace them.
+
+| Tool | What it answers | Where WarrantKit adds |
+|---|---|---|
+| IAM and secrets managers | Who may hold which credential | Ties an agent's authority to the current runtime state, so containment invalidates it |
+| Policy engines (OPA, Cedar) | Is this request allowed by policy | Binds the decision to a signed, epoch-fenced Warrant checked at execution time |
+| Guardrails and prompt filters | Is this input or output risky | A deterministic boundary that does not depend on the model behaving |
+| Sandboxes and cgroups | Can this process be isolated or killed | Coordinates authority with enforcement via [AgentContainment](https://github.com/Therealdk8890/AgentContainment) |
+| Tracing (LangSmith, Langfuse, OpenTelemetry) | What happened | Separately verifiable evidence of what was authorized and refused |
+
+**Version: [`warrantkit 0.2.0`](https://github.com/Therealdk8890/WarrantKit/releases/tag/v0.2.0)** · [PyPI package](https://pypi.org/project/warrantkit/)
+
+**Release focus:** Public guarded execution, final authority rechecks, and experimental authenticated external-decision import. See the [0.2.0 release record and procedure](docs/RELEASE_0.2.0.md).
+
+## Install version 0.2.0
+
+Install the versioned package with Python 3.11 or newer:
+
+```bash
+python -m pip install --upgrade warrantkit==0.2.0
 warrantkit demo
 ```
 
@@ -33,6 +79,14 @@ The portable `warrantkit demo` is a simulated lifecycle demonstration, not proof
 **Authority that stops being valid when the runtime state that created it changes.**
 
 WarrantKit binds execution authority to accepted policy, runtime identity, and runtime epoch. When containment advances the epoch, retained pre-containment authority is fenced out. WarrantKit coordinates the authority lifecycle; [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides external runtime enforcement.
+
+## Open-source authority; NobodySystems enterprise operations
+
+**WarrantKit is the independent Apache-2.0 authority engine.** Run its Warrant/epoch-fencing and controller-owned-gateway proofs without any proprietary service. [AgentContainment](https://github.com/Therealdk8890/AgentContainment) provides the external enforcement boundary; [DProvenanceKit](https://github.com/Therealdk8890/DProvenanceKit) provides separately verifiable trace evidence.
+
+**NobodySystems** is the **proprietary operational/control-plane layer** coordinating these independent engines for teams. Its **private alpha** currently supports local operator workflows, bounded guarded tools, and separate evidence-bundle verification. Organization-wide policy lifecycle, cross-engine evidence correlation, fleet operations, enterprise identity/support guarantees, and hosted management are **planned capabilities, not a shipped production offer**.
+
+Evaluate the OSS proof below first. For exact engine/platform responsibilities, test assertions, licensing, access, and current release limits, see [NobodySystems integration and commercial boundary](docs/NOBODYSYSTEMS.md). The existing separate `WarrantKit-Commercial` tenant-ingestion prototype is not evidence that NobodySystems Enterprise or Cloud is production-ready.
 
 ## Current implementation status
 
@@ -81,12 +135,12 @@ warrantkit demo
 
 Each proof has a narrower claim than a full production deployment. Preserve real-kill artifacts with the exact source revision and host details. The default demo signing key supports integrity checks only; authenticated incident evidence requires an operator-controlled Ed25519 key and a public key provisioned independently of the evidence bundle. See the [real-kill guide](docs/REAL_KILL_DEMO.md#trust-boundary-and-interpretation) and [trust-anchor operations](docs/INCIDENT_TRUST_ANCHOR_OPERATIONS.md).
 
-## Public guarded-execution API (unreleased)
+## Public guarded-execution API (0.2.0)
 
-The development branch provides `BoundGuardedExecution` for trusted,
+Version 0.2.0 provides `BoundGuardedExecution` for trusted,
 synchronous Python integrations that need one Warrant-aware execution
 boundary without importing private framework-adapter functions. This API
-is **not included in the published 0.1.6 package** until a new release.
+was introduced after 0.1.6.
 
 ```python
 from agentcontain import BoundGuardedExecution

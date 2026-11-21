@@ -7,14 +7,12 @@ claimed by this adapter.
 """
 from __future__ import annotations
 
-from copy import deepcopy
 from functools import wraps
 import inspect
 from typing import Any
-from uuid import uuid4
 
 from ..engine import Admission
-from ._authority import verify_current_authority, verify_current_capability
+from ._execution import execute_authorized, snapshot_authority
 
 
 class OpenAIAgentsWarrantError(RuntimeError):
@@ -68,68 +66,25 @@ def wrap_openai_tool(
 
     operation = name_override or getattr(function, "__name__", "openai_tool")
     required_capability = capability or operation
-    expected_snapshot = (
-        admission.identity,
-        deepcopy(admission.policy),
-        admission.warrant,
-        deepcopy(admission.warrant_attestation),
-    )
+    expected_snapshot = snapshot_authority(admission)
 
     @wraps(function)
     def invoke_authorized(*args: Any, **kwargs: Any) -> Any:
-        # Pin the runtime lease before checking the Warrant. If containment or
-        # recovery occurs after verification, this exact lease becomes invalid;
-        # never acquire a fresh lease for an already-authorized invocation.
-        execution_lease = gateway.acquire_lease()
-        if execution_lease is None:
-            raise OpenAIAgentsWarrantError(
-                "runtime is not active; execution lease unavailable"
-            )
-
-        verify_current_authority(
-            admission,
-            gateway,
-            warrant_verifier,
-            expected_snapshot,
-            error_type=OpenAIAgentsWarrantError,
-            framework="OpenAI Agents",
-        )
-
-        warrant = admission.warrant
-        if warrant is None:
-            raise OpenAIAgentsWarrantError("execution has no Warrant authority")
-        if required_capability not in warrant.authority.capabilities:
-            raise OpenAIAgentsWarrantError(
-                f"Warrant does not grant capability '{required_capability}'"
-            )
-
-        from agent_containment.models import Action, DecisionType
-
-        action = Action(
-            agent_id=admission.identity.agent_id,
-            action_id=f"openai-agents:{admission.identity.execution_id}:{uuid4()}",
+        return execute_authorized(
+            function=lambda: function(*args, **kwargs),
+            admission=admission,
+            gateway=gateway,
+            warrant_verifier=warrant_verifier,
+            expected_snapshot=expected_snapshot,
+            required_capability=required_capability,
             operation=operation,
             resource=resource,
             risk=risk,
-            metadata={"framework": "openai-agents-sdk"},
+            action_prefix="openai-agents",
+            metadata_framework="openai-agents-sdk",
+            framework="OpenAI Agents",
+            error_type=OpenAIAgentsWarrantError,
         )
-        def guarded_callback(_action):
-            verify_current_capability(
-                admission, gateway, warrant_verifier, expected_snapshot,
-                required_capability, error_type=OpenAIAgentsWarrantError, framework="OpenAI Agents",
-            )
-            return function(*args, **kwargs)
-
-        result = gateway.execute_with_lease(
-            action,
-            execution_lease,
-            guarded_callback,
-        )
-        if hasattr(result, "decision") and result.decision is not DecisionType.ALLOW:
-            raise OpenAIAgentsWarrantError(
-                f"AgentContainment denied '{operation}': {result.reason}"
-            )
-        return result
 
     tool_options: dict[str, Any] = {"failure_error_function": None}
     if name_override is not None:

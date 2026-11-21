@@ -4,16 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "warrantkit"
-version = "0.1.6"
+version = "0.2.0"
 description = "Runtime enforcement and proof platform for autonomous AI agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
-authors = [{ name = "Daniel Kissel" }]
-keywords = ["ai-agents", "agent-security", "agent-containment", "ai-safety", "runtime-security", "policy-enforcement", "cgroups", "ebpf"]
-classifiers = ["Development Status :: 3 - Alpha", "Intended Audience :: Developers", "License :: OSI Approved :: Apache Software License", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only"]
+authors = [{ name = "Daniel Paul Kissel" }]
+keywords = ["ai-agents", "agent-security", "agent-containment", "ai-safety", "runtime-security", "policy-enforcement", "cgroups", "ebpf", "llm-security", "authorization", "kill-switch", "langchain", "crewai", "openai-agents", "mcp"]
+classifiers = ["Development Status :: 3 - Alpha", "Intended Audience :: Developers", "License :: OSI Approved :: Apache Software License", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only", "Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.12", "Programming Language :: Python :: 3.13", "Operating System :: OS Independent", "Topic :: Security", "Topic :: Scientific/Engineering :: Artificial Intelligence", "Topic :: Software Development :: Libraries :: Python Modules"]
 dependencies = ["agentcontainment>=0.1.3,<0.2"]
-urls = { Repository = "https://github.com/Therealdk8890/WarrantKit", Issues = "https://github.com/Therealdk8890/WarrantKit/issues" }
+urls = { Repository = "https://github.com/Therealdk8890/WarrantKit", Issues = "https://github.com/Therealdk8890/WarrantKit/issues", Changelog = "https://github.com/Therealdk8890/WarrantKit/blob/main/CHANGELOG.md" }
 
 [project.scripts]
 warrantkit = "agentcontain.cli:main"

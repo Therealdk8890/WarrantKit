@@ -99,14 +99,16 @@ def test_mcp_handler_rejects_execution_if_epoch_changes_after_warrant_check(monk
     protected = integration.wrap_mcp_tool(
         write_record, admission, gateway, warrant_verifier=verifier
     )
-    original_check = integration.verify_current_authority
+    # Intercept the shared preflight verifier to exercise the lease race.
+    import agentcontain.integrations._execution as execution
+    original_check = execution.verify_current_capability
 
     def check_then_contain(*args, **kwargs):
         original_check(*args, **kwargs)
         contain(admission)
         recover(admission, issue_recovery_authorization(admission))
 
-    monkeypatch.setattr(integration, "verify_current_authority", check_then_contain)
+    monkeypatch.setattr(execution, "verify_current_capability", check_then_contain)
     with pytest.raises(integration.MCPWarrantError):
         protected("must-not-run")
     assert calls == []

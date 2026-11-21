@@ -58,7 +58,7 @@ jobs:
         run: python -m pip install -e '.[test]'
 
       - name: Install DProvenanceKit proof test dependency
-        run: python -m pip install 'dprovenancekit[crypto]==0.9.2'
+        run: python -m pip install 'dprovenancekit[crypto]==0.10.0'
 
       - name: Verify package metadata
         run: |
@@ -71,7 +71,7 @@ jobs:
 
           version = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
           readme = pathlib.Path("README.md").read_text()
-          assert any(label in readme for label in (f"Latest release: [`warrantkit {version}`]", f"Release candidate: [`warrantkit {version}`]")), (
+          assert any(label in readme for label in (f"Version: [`warrantkit {version}`]", f"Latest release: [`warrantkit {version}`]", f"Release candidate: [`warrantkit {version}`]")), (
               "README latest-release label does not match pyproject.toml"
           )
           assert f"warrantkit=={version}" in readme, (
@@ -224,8 +224,8 @@ jobs:
       - name: Install pytest for focused integration tests
         run: python -m pip install pytest
 
-      - name: Run public LangChain middleware factory tests
-        run: python -m pytest -q tests/test_langchain_middleware_factory.py
+      - name: Run LangChain adapter and middleware regression tests
+        run: python -m pytest -q tests/test_langchain_integration.py tests/test_langchain_middleware.py tests/test_langchain_middleware_factory.py
 
       - name: Run deterministic authority boundary proof
         run: python tools/run_authority_boundary_demo.py
@@ -261,7 +261,7 @@ jobs:
         run: python -m pip install -e '.[test]'
 
       - name: Install DProvenanceKit attestation verifier
-        run: python -m pip install 'dprovenancekit[crypto]==0.9.2'
+        run: python -m pip install 'dprovenancekit[crypto]==0.10.0'
 
       - name: Inspect cgroup environment
         run: |

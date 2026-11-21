@@ -167,7 +167,7 @@ def test_langchain_wrapper_rejects_replaced_admission_warrant() -> None:
         ),
     )
 
-    with pytest.raises(LangChainWarrantError, match="signed Warrant payload does not match"):
+    with pytest.raises(LangChainWarrantError, match="admission authority changed after the protected tool was wrapped"):
         wrapped.invoke({"value": "must-not-run"})
     assert calls == []
 
@@ -181,6 +181,7 @@ def test_langchain_tool_rejects_unsigned_warrant_before_side_effect() -> None:
 
     @tool
     def protected_write(value: str) -> str:
+        """Perform a protected write."""
         calls.append(value)
         return "written"
 
@@ -214,6 +215,7 @@ def test_langchain_wrapper_rejects_replay_of_another_valid_signed_warrant():
 
     @tool
     def protected_write(value: str) -> str:
+        """Perform a protected write."""
         calls.append(value)
         return "written"
 
