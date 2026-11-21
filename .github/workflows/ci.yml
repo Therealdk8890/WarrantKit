@@ -88,6 +88,90 @@ jobs:
       - name: Run unit tests
         run: python -m pytest -q tests -m "not integration"
 
+  newer-agentcontainment-interop:
+    name: Newer AgentContainment in-flight fence contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout WarrantKit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Checkout newer AgentContainment at an immutable revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Therealdk8890/AgentContainment
+          # This is intentionally newer than WarrantKit's existing submodule pin.
+          ref: b4262ac3b4d4ea6917f95be05d07e1b505ad847c
+          path: AgentContainment-next
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install the exact newer AgentContainment source and WarrantKit
+        run: |
+          python -m pip install -e ./AgentContainment-next
+          python -m pip install -e '.[test]'
+          python - <<'PY'
+          from pathlib import Path
+          import agent_containment.runtime as runtime
+          module = Path(runtime.__file__).resolve()
+          source = Path("AgentContainment-next/src").resolve()
+          assert module.is_relative_to(source), f"wrong runtime imported: {module}"
+          print("Using newer AgentContainment runtime from", module)
+          PY
+
+      - name: Verify cross-repository public guarded execution contract
+        run: python -m pytest -q tests/test_guarded_execution.py tests/test_newer_agentcontainment_runtime_contract.py tests/test_agentcontainment_fence_recovery.py
+
+  newer-agentcontainment-real-kill:
+    name: Newer AgentContainment in-flight cgroup real-kill proof
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout WarrantKit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Checkout exact newer AgentContainment source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: Therealdk8890/AgentContainment
+          ref: b4262ac3b4d4ea6917f95be05d07e1b505ad847c
+          path: AgentContainment-next
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Install exact newer runtime and WarrantKit
+        run: |
+          python -m pip install -e ./AgentContainment-next
+          python -m pip install -e '.[test]'
+
+      - name: Verify actual installed runtime and cgroup-v2 host
+        run: |
+          stat -fc %T /sys/fs/cgroup
+          test -f /sys/fs/cgroup/cgroup.controllers
+          sudo env "$pythonLocation/bin/python" -c 'import pathlib; import agent_containment.runtime as r; p = pathlib.Path(r.__file__).resolve(); root = pathlib.Path("AgentContainment-next/src").resolve(); assert p.is_relative_to(root), f"unexpected runtime: {p}"; print("Running pinned newer runtime:", p)'
+
+      - name: Prove real kernel kill during an already-admitted guarded action
+        env:
+          WARRANTKIT_RUN_INFLIGHT_REAL_KILL: "1"
+        run: |
+          sudo env \
+            "WARRANTKIT_RUN_INFLIGHT_REAL_KILL=$WARRANTKIT_RUN_INFLIGHT_REAL_KILL" \
+            "$pythonLocation/bin/python" -m pytest -q -rs \
+            tests/integration/test_inflight_cgroup_external_enforcement.py
+
   crewai-adapter:
     name: CrewAI adapter regression tests
     runs-on: ubuntu-latest

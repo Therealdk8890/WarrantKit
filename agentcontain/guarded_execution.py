@@ -91,9 +91,12 @@ class BoundGuardedExecution:
         sentinel = object()
 
         def guarded_callback(approved_action: Action):
-            # This runs inside Runtime.execute_if_active's fence lock.
-            # It closes the expiry/revocation race introduced by the gateway's
-            # policy evaluation and preserves the exact lease used at entry.
+            # Runtime.execute_if_active admits work under its lifecycle fence.
+            # Newer AgentContainment releases may execute this callback outside
+            # the lifecycle lock. This recheck catches policy-time expiry or
+            # revocation, but cannot atomically fence a later external effect:
+            # already-admitted work needs downstream cancellation/revocation.
+            # The exact lease acquired at entry remains authoritative.
             self._verify(approved_action)
             output = executor(approved_action)
             if inspect.isawaitable(output):
