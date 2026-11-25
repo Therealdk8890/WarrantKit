@@ -7,7 +7,7 @@ import pytest
 from test_mcp_integration import _setup
 
 from agentcontain import contain
-from agentcontain.integrations.mcp import wrap_mcp_tool
+from agentcontain.integrations.mcp import MCPWarrantError, wrap_mcp_tool
 
 
 @pytest.mark.parametrize("authorized", [True, False])
@@ -46,6 +46,8 @@ def test_sdk_dispatch_preserves_authority(authorized: bool) -> None:
             with pytest.raises(error):
                 asyncio.run(server.call_tool("write_record", {"value": "denied"}))
         else:
-            result = asyncio.run(server.call_tool("write_record", {"value": "denied"}))
-            assert result.is_error
+            error = import_module("mcp.server.mcpserver.exceptions").UnexpectedToolError
+            with pytest.raises(error) as denied:
+                asyncio.run(server.call_tool("write_record", {"value": "denied"}))
+            assert isinstance(denied.value.__cause__, MCPWarrantError)
         assert calls == (["allowed"] if authorized else [])
