@@ -80,6 +80,15 @@ class ExternalAuthorizationDecision:
 
         The locally accepted policy remains authoritative. A mismatched external
         policy identity or digest fails closed instead of widening local authority.
+
+        Trust contract (issue #207): this conversion does **not** authenticate the
+        decision. ``issuer`` is caller-supplied text, and policy-digest equality is
+        not evidence that an identity provider approved the request. The returned
+        Warrant is unsigned; framework adapters accept only a Warrant attestation
+        signed by a controller key in their trusted verifier. Authenticate the
+        upstream decision first (for example with
+        ``agentcontain.signed_external_authorization.import_signed_authorization``)
+        and never sign a local Warrant based solely on this structural check.
         """
         if self.policy_id != policy.policy_id:
             raise ValueError("external authorization policy_id does not match accepted policy")
@@ -146,7 +155,18 @@ def import_authorization(
     epoch: int,
     now: datetime | None = None,
 ) -> Warrant:
-    """Import a minimal external decision without importing external evidence."""
+    """Structurally import a minimal external decision as an unsigned Warrant.
+
+    This is **not source authentication** (issue #207). It validates shape, the
+    locally accepted policy ID and digest, the capability subset, expiry bounds
+    and epoch binding. It does not verify a signature, a trusted issuer key, an
+    audience or replay: ``issuer`` is whatever the document says. Use
+    ``import_signed_authorization`` (opt-in Ed25519 profile) or another verifier
+    that authenticates the exact payload *before* calling this function, and do
+    not sign the returned Warrant on the strength of this check alone.
+
+    External evidence is never imported.
+    """
     required = {
         "schema_version", "decision_id", "issuer", "subject_agent_id",
         "subject_execution_id", "policy_id", "policy_digest", "capabilities",
