@@ -13,7 +13,16 @@ permissions:
 
 jobs:
   published-artifacts:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # workflow_run executes in the default branch's privileged context, so only act on
+    # successful publish runs that maintainers started in this repository (a release or a
+    # manual dispatch). That keeps the checked-out head_sha trusted (CodeQL
+    # actions/cache-poisoning/poisonable-step); this job also uses no Actions cache.
+    if: >-
+      github.event_name != 'workflow_run' || (
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_repository.full_name == github.repository &&
+        (github.event.workflow_run.event == 'release' || github.event.workflow_run.event == 'workflow_dispatch')
+      )
     name: PyPI install and authority-boundary proof
     runs-on: ubuntu-latest
     steps:
