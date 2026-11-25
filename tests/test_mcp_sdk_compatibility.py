@@ -1,17 +1,19 @@
-"""Exercise real MCP SDK registration and dispatch, not only direct wrappers."""
+"""Exercise SDK registration and dispatch across MCP major versions."""
 
 import asyncio
+from importlib import import_module, metadata
 
 import pytest
-from mcp.server.fastmcp import FastMCP
+from test_mcp_integration import _setup
 
 from agentcontain import contain
 from agentcontain.integrations.mcp import wrap_mcp_tool
-from test_mcp_integration import _setup
 
 
 @pytest.mark.parametrize("authorized", [True, False])
 def test_sdk_dispatch_preserves_authority(authorized: bool) -> None:
+    pytest.importorskip("mcp")
+    major = metadata.version("mcp").split(".")[0]
     calls: list[str] = []
 
     def write_record(value: str) -> str:
@@ -22,14 +24,28 @@ def test_sdk_dispatch_preserves_authority(authorized: bool) -> None:
         "sdk-allow" if authorized else "sdk-deny",
         "write_record" if authorized else "read_only",
     )
-    server = FastMCP("warrantkit-compatibility")
+    if major == "1":
+        server = import_module("mcp.server.fastmcp").FastMCP("warrantkit")
+    else:
+        assert major == "2"
+        server = import_module("mcp.server.mcpserver").MCPServer("warrantkit")
+
     server.add_tool(
         wrap_mcp_tool(write_record, admission, gateway, warrant_verifier=verifier)
     )
     if authorized:
-        asyncio.run(server.call_tool("write_record", {"value": "allowed"}))
+        result = asyncio.run(server.call_tool("write_record", {"value": "allowed"}))
+        if major == "2":
+            assert not result.is_error
         assert calls == ["allowed"]
         contain(admission)
-    with pytest.raises(Exception):
-        asyncio.run(server.call_tool("write_record", {"value": "denied"}))
-    assert calls == (["allowed"] if authorized else [])
+
+    for _ in range(2):
+        if major == "1":
+            error = import_module("mcp.server.fastmcp.exceptions").ToolError
+            with pytest.raises(error):
+                asyncio.run(server.call_tool("write_record", {"value": "denied"}))
+        else:
+            result = asyncio.run(server.call_tool("write_record", {"value": "denied"}))
+            assert result.is_error
+        assert calls == (["allowed"] if authorized else [])
