@@ -1,0 +1,43 @@
+name: MCP compatibility
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  mcp:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - major: 1
+            requirement: "mcp>=1,<2"
+          - major: 2
+            requirement: "mcp==2.3.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          submodules: recursive
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.12"
+      - name: Install exact runtime and SDK family
+        env:
+          MCP_REQUIREMENT: ${{ matrix.requirement }}
+        run: |
+          python -m pip install -e ./AgentContainment
+          python -m pip install -e '.[mcp]' pytest ruff mypy "$MCP_REQUIREMENT"
+          python -m pip check
+      - name: Verify installed SDK major
+        env:
+          MCP_MAJOR: ${{ matrix.major }}
+        run: python -c 'import os, importlib.metadata as m; v=m.version("mcp"); print(v); assert v.split(".")[0] == os.environ["MCP_MAJOR"]'
+      - name: Lint and type-check compatibility test
+        run: |
+          python -m ruff check tests/test_mcp_sdk_compatibility.py
+          python -m mypy --follow-imports=silent tests/test_mcp_sdk_compatibility.py
+      - name: Run adapter and SDK boundary regressions
+        run: python -m pytest -q tests/test_mcp_integration.py tests/test_mcp_sdk_compatibility.py
