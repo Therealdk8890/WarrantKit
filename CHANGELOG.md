@@ -6,6 +6,15 @@ The project is currently pre-1.0. Entries describe shipped repository changes; t
 
 ## Unreleased
 
+### Security
+
+- Made the external authorization trust contract explicit (#207).
+  `import_authorization` and `ExternalAuthorizationDecision.to_warrant` now
+  document that structural validation is not source authentication and point to
+  the authenticated `import_signed_authorization` profile. New tests pin that a
+  structurally imported Warrant is unsigned and that adapter verification accepts
+  only Warrant attestations signed by a trusted controller key.
+
 ## 0.2.0 — 2026-11-15
 
 ### Added
